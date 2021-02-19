@@ -44,7 +44,7 @@ RUN mkdir /workspace && cd /workspace && \
 
 WORKDIR /workspace/
 
-ADD ${PWD}/license-tool/src/entrypoint.sh /workspace/entrypoint.sh
-ADD ${PWD}/license-tool/src/bump-deps.js /workspace/bump-deps.js
+ADD ${PWD}/src/entrypoint.sh /workspace/entrypoint.sh
+ADD ${PWD}/src/bump-deps.js /workspace/bump-deps.js
 
 ENTRYPOINT ["/workspace/entrypoint.sh"]
