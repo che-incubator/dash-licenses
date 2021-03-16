@@ -11,9 +11,33 @@
  */
 
 const { execSync } = require('child_process');
-const { writeFileSync, existsSync, readFileSync } = require('fs');
+const { writeFileSync, existsSync, readFileSync, mkdirSync } = require('fs');
+
+const args = process.argv.slice(2);
+let writeToDisk = true;
+if (args[0] === '--check') {
+  writeToDisk = false;
+}
+
+const EXCLUDED_PROD_DEPENDENCIES = '.deps/EXCLUDED/prod.md';
+const EXCLUDED_DEV_DEPENDENCIES = '.deps/EXCLUDED/dev.md';
+const ALL_DEPENDENCIES = './TMP_DEPENDENCIES';
+const PROD_PATH = '.deps/prod.md';
+const DEV_PATH = '.deps/dev.md';
+const TMP_DIR_PATH = '.deps/tmp'
+const ENCODING = 'utf8';
+
+const depsToCQ = new Map();
+const allLicenses = new Map();
 
 let logs = '';
+
+if (writeToDisk && !existsSync('.deps')) {
+  mkdirSync('.deps');
+}
+if (writeToDisk && !existsSync(TMP_DIR_PATH)) {
+  mkdirSync(TMP_DIR_PATH);
+}
 
 // update excluded deps
 function parseExcludedFileData(fileData, depsMap) {
@@ -56,6 +80,7 @@ function bufferToArray(buffer) {
   return buffer.data.trees.map(entry => entry.name).sort();
 }
 
+let globalUnresolvedNumber = 0;
 function arrayToDocument(title, depsArray, depToCQ, allLicenses) {
   // document title
   let document = '### ' + title + '\n\n';
@@ -75,6 +100,7 @@ function arrayToDocument(title, depsArray, depToCQ, allLicenses) {
       cq = depToCQ.get(item);
     } else {
       logs += `\n${++unresolvedQuantity}. '${item}'`;
+      globalUnresolvedNumber++;
     }
     document += `| ${lib} | ${license} | ${cq} |\n`;
   });
@@ -82,17 +108,6 @@ function arrayToDocument(title, depsArray, depToCQ, allLicenses) {
 
   return document;
 }
-
-const EXCLUDED_PROD_DEPENDENCIES = '.deps/EXCLUDED/prod.md';
-const EXCLUDED_DEV_DEPENDENCIES = '.deps/EXCLUDED/dev.md';
-const ALL_DEPENDENCIES = './DEPENDENCIES';
-const PROD_PATH = '.deps/prod.md';
-const DEV_PATH = '.deps/dev.md';
-const TMP_DIR_PATH = '.deps/tmp'
-const ENCODING = 'utf8';
-
-const depsToCQ = new Map();
-const allLicenses = new Map();
 
 // licenses buffer
 const allLicensesBuffer = execSync('yarn licenses list --json --depth=0 --no-progress').toString();
@@ -131,17 +146,26 @@ if (existsSync(EXCLUDED_PROD_DEPENDENCIES)) {
   parseExcludedFileData(readFileSync(EXCLUDED_PROD_DEPENDENCIES, ENCODING), depsToCQ);
 }
 
-writeFileSync(PROD_PATH, arrayToDocument('Production dependencies', prodDeps, depsToCQ, allLicenses), ENCODING);
+const prodDepsData = arrayToDocument('Production dependencies', prodDeps, depsToCQ, allLicenses);
+if (writeToDisk) {
+  writeFileSync(PROD_PATH, prodDepsData, ENCODING);
+}
 
 if (existsSync(EXCLUDED_DEV_DEPENDENCIES)) {
   parseExcludedFileData(readFileSync(EXCLUDED_DEV_DEPENDENCIES, ENCODING), depsToCQ);
 }
 
-writeFileSync(DEV_PATH, arrayToDocument('Development dependencies', devDeps, depsToCQ, allLicenses), ENCODING);
+const devDepsData = arrayToDocument('Development dependencies', devDeps, depsToCQ, allLicenses);
+if (writeToDisk) {
+  writeFileSync(DEV_PATH, devDepsData, ENCODING);
+}
 
 if (logs) {
-  if (existsSync(TMP_DIR_PATH)) {
+  if (writeToDisk) {
     writeFileSync(`${TMP_DIR_PATH}/logs`, logs, ENCODING);
   }
   console.log(logs);
+}
+if (globalUnresolvedNumber) {
+  process.exit(1);
 }

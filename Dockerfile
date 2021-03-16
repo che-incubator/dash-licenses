@@ -36,15 +36,17 @@ ENV PATH=/usr/local/lib/nodejs/node-${NODE_VERSION}-${NODE_DISTRO}/bin/:$PATH
 
 RUN npm install yarn -g
 
-RUN mkdir /workspace && cd /workspace && \
-    git clone https://github.com/eclipse/dash-licenses.git && \
-    cd /workspace/dash-licenses && git checkout ${DASH_LICENT_REV} && \
-    mvn clean install && \
-    cd ./yarn && yarn install
+WORKDIR /workspace
+RUN git clone https://github.com/eclipse/dash-licenses.git && \
+  cd dash-licenses && \
+  git checkout ${DASH_LICENSE_REV} && \
+  mvn clean install && \
+  cp core/target/org.eclipse.dash.licenses-0.0.1-SNAPSHOT.jar /workspace/dash-licenses.jar && \
+  cd yarn && \
+  yarn install 
 
-WORKDIR /workspace/
-
-ADD ${PWD}/src/entrypoint.sh /workspace/entrypoint.sh
-ADD ${PWD}/src/bump-deps.js /workspace/bump-deps.js
+COPY ${PWD}/src/bump-deps.js bump-deps.js
+COPY ${PWD}/src/entrypoint.sh entrypoint.sh
+COPY ${PWD}/src/entrypoint-check.sh entrypoint-check.sh
 
 ENTRYPOINT ["/workspace/entrypoint.sh"]
