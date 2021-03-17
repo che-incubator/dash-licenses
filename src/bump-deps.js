@@ -21,10 +21,10 @@ if (args[0] === '--check') {
 
 const EXCLUDED_PROD_DEPENDENCIES = '.deps/EXCLUDED/prod.md';
 const EXCLUDED_DEV_DEPENDENCIES = '.deps/EXCLUDED/dev.md';
-const ALL_DEPENDENCIES = './TMP_DEPENDENCIES';
+const DEPENDENCIES = './TMP_DEPENDENCIES';
 const PROD_PATH = '.deps/prod.md';
 const DEV_PATH = '.deps/dev.md';
-const TMP_DIR_PATH = '.deps/tmp'
+const TMP_DIR_PATH = '.deps/tmp';
 const ENCODING = 'utf8';
 
 const depsToCQ = new Map();
@@ -49,28 +49,45 @@ function parseExcludedFileData(fileData, depsMap) {
 }
 
 // update depsMap
-function parseDependenciesFileData(fileData, depsMap) {
-  const pattern = /^npm\/npmjs\/(-\/)?([^,]+)\/([0-9.]+), ([^,]+)?, approved, (\w+)$/gm;
-
-  let unusedQuantity = 0;
-  let result;
-  if (depsMap.size) {
+function parseDependenciesFile(fileData, dependenciesMap) {
+  let numberUnusedExcludes = 0;
+  if (dependenciesMap.size !== 0) {
     logs += '\n### UNUSED Excludes';
   }
-  while ((result = pattern.exec(fileData)) !== null) {
-    const key = `${result[2]}@${result[3]}`;
-    let cq = result[5]
-    if (depsMap.has(key)) {
-      logs += `\n${++unusedQuantity}. '${key}'`;
-    } else {
-      const cqNum = parseInt(cq.replace('CQ', ''), 10);
-      if (cqNum) {
-        cq = `[CQ${cqNum}](https://dev.eclipse.org/ipzilla/show_bug.cgi?id=${cqNum})`;
+
+  fileData.split(/\r?\n/)
+    .map(line => line.split(/,\s/))
+    .filter(lineData => {
+      const [_cqIdentifier, _license, status, _approvedBy] = lineData;
+      return status === 'approved';
+    })
+    .forEach(lineData => {
+      const [cqIdentifier, _license, _status, approvedBy] = lineData;
+      const [_npm, _npmjs, scope, name, version] = cqIdentifier.split('/');
+
+      const npmIdentifier = scope === '-'
+        ? `${name}@${version}`
+        : `${scope}/${name}@${version}`;
+
+      if (dependenciesMap.has(npmIdentifier)) {
+        logs += `\n${++numberUnusedExcludes}. '${npmIdentifier}'`;
+        return;
       }
-      depsMap.set(key, cq);
-    }
-  }
+
+      const approvalLink = approvedBy === 'clearlydefined'
+        ? approvedBy
+        : cqNumberToLink(approvedBy);
+      dependenciesMap.set(npmIdentifier, approvalLink);
+    });
   logs += '\n';
+}
+function cqNumberToLink(cqNumber) {
+  const number = parseInt(cqNumber.replace('CQ', ''), 10);
+  if (!number) {
+    console.warn(`Warning: failed to parse CQ number from string: "${cqNumber}"`);
+    return cqNumber;
+  }
+  return `[${cqNumber}](https://dev.eclipse.org/ipzilla/show_bug.cgi?id=${number})`;
 }
 
 function bufferToArray(buffer) {
@@ -123,13 +140,7 @@ if (index !== -1) {
   })
 }
 
-let path = ALL_DEPENDENCIES;
-if (!existsSync(ALL_DEPENDENCIES)) {
-  path = path.replace('./', '.deps/tmp/');
-}
-if (existsSync(path)) {
-  parseDependenciesFileData(readFileSync(path, ENCODING), depsToCQ);
-}
+parseDependenciesFile(readFileSync(DEPENDENCIES, ENCODING), depsToCQ);
 
 // prod dependencies
 const prodDepsBuffer = execSync('yarn list --json --prod --depth=0 --no-progress');
