@@ -47,6 +47,5 @@ RUN git clone https://github.com/eclipse/dash-licenses.git && \
 
 COPY ${PWD}/src/bump-deps.js bump-deps.js
 COPY ${PWD}/src/entrypoint.sh entrypoint.sh
-COPY ${PWD}/src/entrypoint-check.sh entrypoint-check.sh
 
 ENTRYPOINT ["/workspace/entrypoint.sh"]

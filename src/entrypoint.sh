@@ -1,5 +1,18 @@
 #!/bin/bash
 
+if [ "$1" = "--help" ]; then
+    cat << EOF
+Usage: entrypoint supports the following arguments [ARGS]
+Arguments:
+  --check
+      In addition to generate dependencies info, check if all of them suttisfy
+      License requirements, fail if no
+  --help
+      Print this message
+EOF
+    exit 0
+fi
+
 CHECK=""
 if [ "$1" = "--check" ]; then
     CHECK="$1";
