@@ -6,17 +6,17 @@ It's container wrapper for (The Eclipse Dash License Tool)[https://github.com/ec
 
 - Docker
 
-## Quick start
-
+## Running
+To generate dependencies info:
 ```sh
-$ ./build.sh
+docker run --rm -t \
+       -v ${PWD}/:/workspace/project  \
+       quay.io/che-incubator/dash-licenses:next
 ```
 
-## Running
+To generate dependencies info and fail if any dependency present which does not satisfies license requirements:
 ```sh
-docker run --rm -t -v ${PWD}/yarn.lock:/workspace/yarn.lock  \
-       -v ${PWD}/package.json:/workspace/package.json  \
-       -v ${PWD}/.deps:/workspace/.deps  \
-       -v ${PWD}/.deps/tmp/DEPENDENCIES:/workspace/DEPENDENCIES \
-       quay.io/che-incubator/che-dashboard-next:nodejs-license-tool
+docker run --rm -t \
+       -v ${PWD}/:/workspace/project  \
+       quay.io/che-incubator/dash-licenses:next --check
 ```
