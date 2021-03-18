@@ -49,3 +49,4 @@ COPY ${PWD}/src/bump-deps.js bump-deps.js
 COPY ${PWD}/src/entrypoint.sh entrypoint.sh
 
 ENTRYPOINT ["/workspace/entrypoint.sh"]
+CMD ["--generate"]

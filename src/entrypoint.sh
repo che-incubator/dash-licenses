@@ -1,21 +1,34 @@
 #!/bin/bash
 
+usage() {
+    bold=$(tput bold)
+    normal=$(tput sgr0)
+    cat <<EOM
+Extract and identify dependencies.
+
+${bold}Arguments:${normal}
+    ${bold}--generate${normal} [default]
+        (Re)generate dependencies info and check if all of dependencies are approved to use.
+    ${bold}--check${normal}
+        Check if dependencies info is present and up-to-date, and all of dependencies are approved to use.
+    ${bold}--help${normal}
+        Print this message.
+EOM
+    exit 0
+}
+
 if [ "$1" = "--help" ]; then
-    cat << EOF
-Usage: entrypoint supports the following arguments [ARGS]
-Arguments:
-  --check
-      In addition to generate dependencies info, check if all of them suttisfy
-      License requirements, fail if no
-  --help
-      Print this message
-EOF
+    usage
+fi
+if [ "$1" != "--help" ] && [ "$1" != "--check" ] && [ "$1" != "--generate" ]; then
+    echo "Error: unknown argument \"$1\" for \"$0\""
+    echo "Run with argument \"--help\" for usage."
     exit 0
 fi
 
 CHECK=""
 if [ "$1" = "--check" ]; then
-    CHECK="$1";
+    CHECK="$1"
 fi
 
 WORKSPACE=$(pwd)
@@ -38,14 +51,22 @@ if [ ! -f $PROJECT/yarn.lock ]; then
 fi
 
 if [ -n "$CHECK" ] && [ ! -f $PROJECT/DEPENDENCIES ]; then
-    echo "Error: Can't find DEPENDENCIES file. Generate and commit this file for the project using 'dash-license' and then try again."
+    # echo "Error: Can't find DEPENDENCIES file. Generate and commit this file for the project using 'dash-license' and then try again."
+    cat <<EOM
+Error: Can't find DEPENDENCIES file.
+Execute the following command to generate dependencies info and then try again:
+
+docker run \\
+       -v \$(pwd):/workspace/project \\
+       quay.io/che-incubator/dash-licenses:next
+EOM
     exit 1
 fi
 
 DASH_LICENSES_DIR=$WORKSPACE/dash-licenses
 DASH_LICENSES=$WORKSPACE/dash-licenses.jar
 if [ ! -f $DASH_LICENSES ]; then
-    echo "Error: Can't find dash-licenses.jar. Rebuild 'nodejs-license-tool' image and try again."
+    echo "Error: Can't find dash-licenses.jar. Contact https://github.com/che-incubator/dash-licenses maintainers to fix the issue."
     exit 1
 fi
 
@@ -86,5 +107,5 @@ fi
 if [ -z "$DIFFER" ] && [ $RESTRICTED -eq 0 ]; then
     echo "All found licenses are approved to use."
 else
-    exit 1;
+    exit 1
 fi
