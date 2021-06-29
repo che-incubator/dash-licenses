@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Red Hat, Inc.
+ * Copyright (c) 2018-2021 Red Hat, Inc.
  * This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License 2.0
  * which is available at https://www.eclipse.org/legal/epl-2.0/
@@ -10,14 +10,13 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
+const { join }  = require('path');
 const { writeFileSync, existsSync, readFileSync } = require('fs');
+const { DEPS_DIR, TMP_DIR, YARN_DEPS_INFO } = require('./index');
 
-const DEPS_DIR = '.deps';
-const TMP_DIR = `${DEPS_DIR}/tmp`;
-const EXCLUSIONS_DIR = `${DEPS_DIR}/EXCLUDED`;
+const EXCLUSIONS_DIR = join(__dirname, `project/${DEPS_DIR}/EXCLUDED`);
 
 const DEPENDENCIES = `${TMP_DIR}/DEPENDENCIES`;
-const YARN_DEPS_INFO = `${TMP_DIR}/yarn-deps-info.json`;
 const YARN_ALL_DEPS = `${TMP_DIR}/yarn-all-deps.json`;
 const YARN_PROD_DEPS = `${TMP_DIR}/yarn-prod-deps.json`;
 
@@ -54,6 +53,10 @@ if (tableStartIndex !== -1) {
   })
 }
 
+if (existsSync(EXCLUDED_PROD_MD)) {
+  parseExcludedFileData(readFileSync(EXCLUDED_PROD_MD, ENCODING), depsToCQ);
+}
+
 // parse DEPENDENCIES file
 parseDependenciesFile(readFileSync(DEPENDENCIES, ENCODING), depsToCQ);
 
@@ -69,10 +72,6 @@ const yarnAllDeps = extractYarnDependencies(yarnAllDepsTree);
 
 // build list of development dependencies
 const yarnDevDeps = yarnAllDeps.filter(entry => yarnProdDeps.includes(entry) === false);
-
-if (existsSync(EXCLUDED_PROD_MD)) {
-  parseExcludedFileData(readFileSync(EXCLUDED_PROD_MD, ENCODING), depsToCQ);
-}
 
 const prodDepsData = arrayToDocument('Production dependencies', yarnProdDeps, depsToCQ, allDependencies);
 if (writeToDisk) {
@@ -90,10 +89,11 @@ if (writeToDisk) {
 
 if (logs) {
   if (writeToDisk) {
-    writeFileSync(`${TMP_DIR}/logs`, logs, ENCODING);
+    writeFileSync(`${TMP_DIR}/problems.md`, `# Dependency analysis\n${logs}`, ENCODING);
   }
   console.log(logs);
 }
+
 if (globalUnresolvedNumber) {
   process.exit(1);
 }
@@ -103,17 +103,17 @@ function parseExcludedFileData(fileData, depsMap) {
   const pattern = /^\| `([^|^ ]+)` \| ([^|]+) \|$/gm;
   let result;
   while ((result = pattern.exec(fileData)) !== null) {
-    depsMap.set(result[1], result[2])
+    depsMap.set(result[1], result[2]);
   }
 }
 
 // update depsMap
 function parseDependenciesFile(fileData, dependenciesMap) {
+  let log = '';
   let numberUnusedExcludes = 0;
-  if (dependenciesMap.size !== 0) {
-    logs += '\n### UNUSED Excludes';
+  if (dependenciesMap.size > 0) {
+    log += '\n## UNUSED Excludes\n';
   }
-
   fileData.split(/\r?\n/)
     .map(line => line.split(/,\s/))
     .filter(lineData => {
@@ -129,7 +129,7 @@ function parseDependenciesFile(fileData, dependenciesMap) {
         : `${scope}/${name}@${version}`;
 
       if (dependenciesMap.has(npmIdentifier)) {
-        logs += `\n${++numberUnusedExcludes}. '${npmIdentifier}'`;
+        log += `\n${++numberUnusedExcludes}. \`${npmIdentifier}\``;
         return;
       }
 
@@ -138,7 +138,9 @@ function parseDependenciesFile(fileData, dependenciesMap) {
         : cqNumberToLink(approvedBy);
       dependenciesMap.set(npmIdentifier, approvalLink);
     });
-  logs += '\n';
+  if (numberUnusedExcludes > 0) {
+    logs += log + '\n';
+  }
 }
 function cqNumberToLink(cqNumber) {
   const number = parseInt(cqNumber.replace('CQ', ''), 10);
@@ -157,11 +159,12 @@ function extractYarnDependencies(obj) {
 }
 
 function arrayToDocument(title, depsArray, depToCQ, allLicenses) {
+  let log = '';
   // document title
-  let document = '### ' + title + '\n\n';
+  let document = '# ' + title + '\n\n';
   // table header
   document += '| Packages | License | Resolved CQs |\n| --- | --- | --- |\n';
-  logs += '\n### UNRESOLVED ' + title;
+  log += '\n## UNRESOLVED ' + title + '\n';
   let unresolvedQuantity = 0;
   // table body
   depsArray.forEach(item => {
@@ -174,12 +177,14 @@ function arrayToDocument(title, depsArray, depToCQ, allLicenses) {
     if (depToCQ.has(item)) {
       cq = depToCQ.get(item);
     } else {
-      logs += `\n${++unresolvedQuantity}. '${item}'`;
+      log += `\n${++unresolvedQuantity}. \`${item}\``;
       globalUnresolvedNumber++;
     }
     document += `| ${lib} | ${license} | ${cq} |\n`;
   });
-  logs += '\n';
+  if (unresolvedQuantity > 0) {
+    logs += log +'\n';
+  }
 
   return document;
 }

@@ -47,7 +47,9 @@ fi
 WORKSPACE_DIR=$(pwd)
 PROJECT_DIR=$WORKSPACE_DIR/project
 DEPS_DIR=$PROJECT_DIR/.deps
-TMP_DIR=$DEPS_DIR/tmp
+PROJECT_COPY_DIR=$WORKSPACE_DIR/project-copy
+DEPS_COPY_DIR=$PROJECT_COPY_DIR/.deps
+TMP_DIR=$DEPS_COPY_DIR/tmp
 CACHE_DIR=$TMP_DIR/cache
 
 mkdir -p $CACHE_DIR
@@ -58,7 +60,6 @@ if [ ! -d $PROJECT_DIR ]; then
     exit 1
 fi
 
-echo $PROJECT_DIR
 if [ ! -f $PROJECT_DIR/package.json ]; then
     echo "Error: Can't find package.json file in the project directory. Commit it and then try again."
     exit 1
@@ -69,6 +70,11 @@ if [ ! -f $PROJECT_DIR/yarn.lock ]; then
     exit 1
 fi
 
+echo "Copy project..."
+cp -R $PROJECT_DIR/* $PROJECT_COPY_DIR
+echo "Done."
+echo
+
 DASH_LICENSES_DIR=$WORKSPACE_DIR/dash-licenses
 DASH_LICENSES=$WORKSPACE_DIR/dash-licenses.jar
 if [ ! -f $DASH_LICENSES ]; then
@@ -76,15 +82,20 @@ if [ ! -f $DASH_LICENSES ]; then
     exit 1
 fi
 
-cd $PROJECT_DIR
+cd $PROJECT_COPY_DIR
 
-echo "Generating a temporary DEPENDENCIES file..."
-node $DASH_LICENSES_DIR/yarn/index.js | java -jar $DASH_LICENSES -summary $TMP_DIR/DEPENDENCIES - > /dev/null
+echo "Set yarn version 1.22.5..."
+yarn policies set-version 1.22.5
 echo "Done."
 echo
 
 echo "Generating all dependencies info using yarn..."
 yarn licenses list --json --depth=0 --no-progres --prefer-offline --frozen-lockfile > $TMP_DIR/yarn-deps-info.json
+echo "Done."
+echo
+
+echo "Generating a temporary DEPENDENCIES file..."
+node $WORKSPACE_DIR/index.js | java -jar $DASH_LICENSES -summary $TMP_DIR/DEPENDENCIES - > /dev/null
 echo "Done."
 echo
 
@@ -125,6 +136,11 @@ fi
 if [ -z "$CHECK" ]; then
     cp $TMP_DIR/prod.md $DEPS_DIR/prod.md
     cp $TMP_DIR/dev.md $DEPS_DIR/dev.md
+    if [ -f "$TMP_DIR/problems.md" ]; then
+      cp "$TMP_DIR/problems.md" "$DEPS_DIR/problems.md"
+    elif [ -f "$DEPS_DIR/problems.md"]; then
+      rm -f "$DEPS_DIR/problems.md"
+    fi
 fi
 if [ -z "$DEBUG" ]; then
     rm -r $TMP_DIR

@@ -21,6 +21,11 @@ docker run --rm -t \
        -v ${PWD}/:/workspace/project  \
        quay.io/che-incubator/dash-licenses:next
 ```
+As the result this command creates next files: 
+
+- `prod.md` with the list of production dependencies;
+- `dev.md` which contains only build and test dependencies;
+- `problems.md` will be created if some dependencies are not covered with CQ, unnecessary excludes present, etc. 
 
 This command doesn't create any new files in the project directory (except a temporary one) but checks if dependencies info is up-to-date and then validates all found dependencies. It returns a non-zero exit code if any of the dependencies are restricted to use. 
 
