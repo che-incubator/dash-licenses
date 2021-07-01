@@ -70,6 +70,14 @@ if [ ! -f $PROJECT_DIR/yarn.lock ]; then
     exit 1
 fi
 
+if [ ! -d $DEPS_DIR ]; then
+    echo
+    echo "Can't find .deps directory. Create..."
+    mkdir $DEPS_DIR
+    echo "Done."
+    echo
+fi
+
 echo "Copy project..."
 cp -R $PROJECT_DIR/* $PROJECT_COPY_DIR
 echo "Done."
