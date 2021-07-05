@@ -34,7 +34,7 @@ RUN curl -fsSL ${NODE_BASE_URL}/node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz -o no
 
 ENV PATH=/usr/local/lib/nodejs/node-${NODE_VERSION}-${NODE_DISTRO}/bin/:$PATH
 
-RUN npm install yarn -g
+RUN npm install yarn synp -g
 
 WORKDIR /workspace
 RUN git clone https://github.com/eclipse/dash-licenses.git && \
@@ -43,9 +43,9 @@ RUN git clone https://github.com/eclipse/dash-licenses.git && \
   mvn clean install -DskipTests && \
   cp core/target/org.eclipse.dash.licenses-0.0.1-SNAPSHOT.jar /workspace/dash-licenses.jar
 
-COPY ${PWD}/src/bump-deps.js bump-deps.js
+COPY ${PWD}/src/package-manager package-manager
 COPY ${PWD}/src/entrypoint.sh entrypoint.sh
-COPY ${PWD}/src/index.js index.js
+COPY ${PWD}/src/document.js document.js
 
 ENTRYPOINT ["/workspace/entrypoint.sh"]
 CMD ["--generate"]

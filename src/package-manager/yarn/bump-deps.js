@@ -12,7 +12,14 @@
 
 const { join }  = require('path');
 const { writeFileSync, existsSync, readFileSync } = require('fs');
-const { DEPS_DIR, TMP_DIR, YARN_DEPS_INFO } = require('./index');
+const { DEPS_DIR, TMP_DIR, YARN_DEPS_INFO } = require('./parser.js');
+const {
+  getLogs,
+  getUnresolvedNumber,
+  parseExcludedFileData,
+  parseDependenciesFile,
+  arrayToDocument
+} = require('../../document.js');
 
 const EXCLUSIONS_DIR = join(__dirname, `project/${DEPS_DIR}/EXCLUDED`);
 
@@ -29,9 +36,6 @@ const ENCODING = 'utf8';
 
 const depsToCQ = new Map();
 const allDependencies = new Map();
-
-let globalUnresolvedNumber = 0;
-let logs = '';
 
 const args = process.argv.slice(2);
 let writeToDisk = true;
@@ -63,12 +67,12 @@ parseDependenciesFile(readFileSync(DEPENDENCIES, ENCODING), depsToCQ);
 // list of prod dependencies names
 const yarnProdDepsStr = readFileSync(YARN_PROD_DEPS).toString();
 const yarnProdDepsTree = JSON.parse(yarnProdDepsStr);
-const yarnProdDeps = extractYarnDependencies(yarnProdDepsTree);
+const yarnProdDeps = extractDependencies(yarnProdDepsTree);
 
 // list of all dependencies names
 const yarnAllDepsStr = readFileSync(YARN_ALL_DEPS).toString();
 const yarnAllDepsTree = JSON.parse(yarnAllDepsStr);
-const yarnAllDeps = extractYarnDependencies(yarnAllDepsTree);
+const yarnAllDeps = extractDependencies(yarnAllDepsTree);
 
 // build list of development dependencies
 const yarnDevDeps = yarnAllDeps.filter(entry => yarnProdDeps.includes(entry) === false);
@@ -87,6 +91,7 @@ if (writeToDisk) {
   writeFileSync(DEV_MD, devDepsData, ENCODING);
 }
 
+const logs = getLogs();
 if (logs) {
   if (writeToDisk) {
     writeFileSync(`${TMP_DIR}/problems.md`, `# Dependency analysis\n${logs}`, ENCODING);
@@ -94,97 +99,13 @@ if (logs) {
   console.log(logs);
 }
 
-if (globalUnresolvedNumber) {
+if (getUnresolvedNumber() > 0) {
   process.exit(1);
 }
 
-// update excluded deps
-function parseExcludedFileData(fileData, depsMap) {
-  const pattern = /^\| `([^|^ ]+)` \| ([^|]+) \|$/gm;
-  let result;
-  while ((result = pattern.exec(fileData)) !== null) {
-    depsMap.set(result[1], result[2]);
-  }
-}
-
-// update depsMap
-function parseDependenciesFile(fileData, dependenciesMap) {
-  let log = '';
-  let numberUnusedExcludes = 0;
-  if (dependenciesMap.size > 0) {
-    log += '\n## UNUSED Excludes\n';
-  }
-  fileData.split(/\r?\n/)
-    .map(line => line.split(/,\s/))
-    .filter(lineData => {
-      const [_cqIdentifier, _license, status, _approvedBy] = lineData;
-      return status === 'approved';
-    })
-    .forEach(lineData => {
-      const [cqIdentifier, _license, _status, approvedBy] = lineData;
-      const [_npm, _npmjs, scope, name, version] = cqIdentifier.split('/');
-
-      const npmIdentifier = scope === '-'
-        ? `${name}@${version}`
-        : `${scope}/${name}@${version}`;
-
-      if (dependenciesMap.has(npmIdentifier)) {
-        log += `\n${++numberUnusedExcludes}. \`${npmIdentifier}\``;
-        return;
-      }
-
-      const approvalLink = approvedBy === 'clearlydefined'
-        ? approvedBy
-        : cqNumberToLink(approvedBy);
-      dependenciesMap.set(npmIdentifier, approvalLink);
-    });
-  if (numberUnusedExcludes > 0) {
-    logs += log + '\n';
-  }
-}
-function cqNumberToLink(cqNumber) {
-  const number = parseInt(cqNumber.replace('CQ', ''), 10);
-  if (!number) {
-    console.warn(`Warning: failed to parse CQ number from string: "${cqNumber}"`);
-    return cqNumber;
-  }
-  return `[${cqNumber}](https://dev.eclipse.org/ipzilla/show_bug.cgi?id=${number})`;
-}
-
-function extractYarnDependencies(obj) {
+function extractDependencies(obj) {
   if (!obj || !obj.data || !obj.data.trees) {
     return [];
   }
   return obj.data.trees.map(entry => entry.name).sort();
-}
-
-function arrayToDocument(title, depsArray, depToCQ, allLicenses) {
-  let log = '';
-  // document title
-  let document = '# ' + title + '\n\n';
-  // table header
-  document += '| Packages | License | Resolved CQs |\n| --- | --- | --- |\n';
-  log += '\n## UNRESOLVED ' + title + '\n';
-  let unresolvedQuantity = 0;
-  // table body
-  depsArray.forEach(item => {
-    const license = allLicenses.has(item) ? allLicenses.get(item).License : '';
-    let lib = `\`${item}\``;
-    if (allLicenses.has(item) && allLicenses.get(item).URL) {
-      lib = `[${lib}](${allLicenses.get(item).URL})`;
-    }
-    let cq = '';
-    if (depToCQ.has(item)) {
-      cq = depToCQ.get(item);
-    } else {
-      log += `\n${++unresolvedQuantity}. \`${item}\``;
-      globalUnresolvedNumber++;
-    }
-    document += `| ${lib} | ${license} | ${cq} |\n`;
-  });
-  if (unresolvedQuantity > 0) {
-    logs += log +'\n';
-  }
-
-  return document;
 }

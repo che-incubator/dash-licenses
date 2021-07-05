@@ -17,14 +17,6 @@ EOM
     exit 0
 }
 
-build_info_msg() {
-    cat <<EOM
-docker run \\
-    -v \$(pwd):/workspace/project \\
-    quay.io/che-incubator/dash-licenses:next
-EOM
-}
-
 if [ "$1" = "--help" ]; then
     usage
 fi
@@ -44,15 +36,17 @@ if [ "$1" = "--debug" ]; then
     DEBUG="$1"
 fi
 
-WORKSPACE_DIR=$(pwd)
-PROJECT_DIR=$WORKSPACE_DIR/project
-DEPS_DIR=$PROJECT_DIR/.deps
-PROJECT_COPY_DIR=$WORKSPACE_DIR/project-copy
-DEPS_COPY_DIR=$PROJECT_COPY_DIR/.deps
-TMP_DIR=$DEPS_COPY_DIR/tmp
-CACHE_DIR=$TMP_DIR/cache
+export WORKSPACE_DIR=/workspace
+export PROJECT_DIR=$WORKSPACE_DIR/project
+export DEPS_DIR=$PROJECT_DIR/.deps
+export PROJECT_COPY_DIR=$WORKSPACE_DIR/project-copy
+export DEPS_COPY_DIR=$PROJECT_COPY_DIR/.deps
+export TMP_DIR=$DEPS_COPY_DIR/tmp
+export CACHE_DIR=$TMP_DIR/cache
+export DASH_LICENSES=$WORKSPACE_DIR/dash-licenses.jar
 
 mkdir -p $CACHE_DIR
+mkdir -p $PROJECT_COPY_DIR
 
 if [ ! -d $PROJECT_DIR ]; then
     echo
@@ -60,13 +54,12 @@ if [ ! -d $PROJECT_DIR ]; then
     exit 1
 fi
 
-if [ ! -f $PROJECT_DIR/package.json ]; then
-    echo "Error: Can't find package.json file in the project directory. Commit it and then try again."
-    exit 1
-fi
-
-if [ ! -f $PROJECT_DIR/yarn.lock ]; then
-    echo "Error: Can't find yarn.lock file. Generate and commit the lock file and then try again."
+if [ ! -f $PROJECT_DIR/yarn.lock ] && [ ! -f $PROJECT_DIR/package-lock.json ] && [ ! -f $PROJECT_DIR/pom.xml ]; then
+    if [ -f $PROJECT_DIR/package.json ]; then
+      echo "Error: Can't find lock file. Generate and commit the lock file and then try again."
+      exit 1
+    fi
+    echo "Error: Can't find any package manager file."
     exit 1
 fi
 
@@ -83,7 +76,10 @@ cp -R $PROJECT_DIR/* $PROJECT_COPY_DIR
 echo "Done."
 echo
 
-DASH_LICENSES_DIR=$WORKSPACE_DIR/dash-licenses
+if [ ! -d $TMP_DIR ]; then
+    mkdir $TMP_DIR
+fi
+
 DASH_LICENSES=$WORKSPACE_DIR/dash-licenses.jar
 if [ ! -f $DASH_LICENSES ]; then
     echo "Error: Can't find dash-licenses.jar. Contact https://github.com/che-incubator/dash-licenses maintainers to fix the issue."
@@ -92,81 +88,20 @@ fi
 
 cd $PROJECT_COPY_DIR
 
-echo "Set yarn version 1.22.5..."
-yarn policies set-version 1.22.5
-echo "Done."
-echo
-
-echo "Generating all dependencies info using yarn..."
-yarn licenses list --json --depth=0 --no-progres --prefer-offline --frozen-lockfile > $TMP_DIR/yarn-deps-info.json
-echo "Done."
-echo
-
-echo "Generating a temporary DEPENDENCIES file..."
-node $WORKSPACE_DIR/index.js | java -jar $DASH_LICENSES -summary $TMP_DIR/DEPENDENCIES - > /dev/null
-echo "Done."
-echo
-
-echo "Generating list of production dependencies using yarn..."
-yarn list --json --prod --depth=0 --no-progres > $TMP_DIR/yarn-prod-deps.json
-echo "Done."
-echo
-
-echo "Generating list of all dependencies using yarn..."
-yarn list --json --depth=0 --no-progress > $TMP_DIR/yarn-all-deps.json
-echo "Done."
-echo
-
-echo "Checking dependencies for restrictions to use..."
-node $WORKSPACE_DIR/bump-deps.js $CHECK
-RESTRICTED=$?
-echo "Done."
-echo
-
-DIFFER_PROD=""
-DIFFER_DEV=""
-
-# production dependencies
-if [ -n "$CHECK" ]; then
-    echo "Looking for changes in production dependencies list..."
-    DIFFER_PROD=$(comm --nocheck-order -3 $DEPS_DIR/prod.md $TMP_DIR/prod.md)
-    echo "Done."
-    echo
+if [ -f $PROJECT_COPY_DIR/pom.xml ]; then
+    $WORKSPACE_DIR/package-manager/mvn/start.sh $1
+    exit 0
 fi
 
-if [ -n "$CHECK" ]; then
-    echo "Looking for changes in test- and development dependencies list..."
-    DIFFER_DEV=$(comm --nocheck-order -3 $DEPS_DIR/dev.md $TMP_DIR/dev.md)
-    echo "Done."
-    echo
+if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
+    $WORKSPACE_DIR/package-manager/yarn/start.sh $1
+    exit 0
 fi
 
-if [ -z "$CHECK" ]; then
-    cp $TMP_DIR/prod.md $DEPS_DIR/prod.md
-    cp $TMP_DIR/dev.md $DEPS_DIR/dev.md
-    if [ -f "$TMP_DIR/problems.md" ]; then
-      cp "$TMP_DIR/problems.md" "$DEPS_DIR/problems.md"
-    elif [ -f "$DEPS_DIR/problems.md"]; then
-      rm -f "$DEPS_DIR/problems.md"
-    fi
-fi
-if [ -z "$DEBUG" ]; then
-    rm -r $TMP_DIR
+if [ -f $PROJECT_COPY_DIR/package-lock.json ]; then
+    $WORKSPACE_DIR/package-manager/npm/start.sh $1
+    exit 0
 fi
 
-if [ -n "$DIFFER_PROD" ]; then
-    echo "Error: The list of production dependencies is outdated. Please run the following command and commit changes:"
-    build_info_msg
-fi
-if [ -n "$DIFFER_DEV" ]; then
-    echo "Error: The list of development dependencies is outdated. Please run the following command and commit changes:"
-    build_info_msg
-fi
-if [ $RESTRICTED -ne 0 ]; then
-    echo "Error: Restricted dependencies are found in the project."
-fi
-if [ -z "$DIFFER_PROD" ] && [ -z "$DIFFER_DEV" ] && [ $RESTRICTED -eq 0 ]; then
-    echo "All found licenses are approved to use."
-else
-    exit 1
-fi
+echo "Error: Can't find any package manager file."
+exit 1
