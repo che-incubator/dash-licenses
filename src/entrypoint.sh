@@ -36,17 +36,15 @@ if [ "$1" = "--debug" ]; then
     DEBUG="$1"
 fi
 
+export ENCODING=utf8
+
 export WORKSPACE_DIR=/workspace
 export PROJECT_DIR=$WORKSPACE_DIR/project
 export DEPS_DIR=$PROJECT_DIR/.deps
 export PROJECT_COPY_DIR=$WORKSPACE_DIR/project-copy
 export DEPS_COPY_DIR=$PROJECT_COPY_DIR/.deps
 export TMP_DIR=$DEPS_COPY_DIR/tmp
-export CACHE_DIR=$TMP_DIR/cache
 export DASH_LICENSES=$WORKSPACE_DIR/dash-licenses.jar
-
-mkdir -p $CACHE_DIR
-mkdir -p $PROJECT_COPY_DIR
 
 if [ ! -d $PROJECT_DIR ]; then
     echo
@@ -72,12 +70,15 @@ if [ ! -d $DEPS_DIR ]; then
 fi
 
 echo "Copy project..."
-cp -R $PROJECT_DIR/* $PROJECT_COPY_DIR
+mkdir -p $PROJECT_COPY_DIR
+cp -RT $PROJECT_DIR $PROJECT_COPY_DIR
 echo "Done."
 echo
 
 if [ ! -d $TMP_DIR ]; then
+    echo "Create tmp dir..."
     mkdir $TMP_DIR
+    echo "Done."
 fi
 
 DASH_LICENSES=$WORKSPACE_DIR/dash-licenses.jar
@@ -94,7 +95,11 @@ if [ -f $PROJECT_COPY_DIR/pom.xml ]; then
 fi
 
 if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
-    $WORKSPACE_DIR/package-manager/yarn/start.sh $1
+    if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)"  -lt  2 ]; then
+      $WORKSPACE_DIR/package-manager/yarn/start.sh $1
+    elif [ -z "$CHECK" ]; then
+      $WORKSPACE_DIR/package-manager/yarn2/start.sh $1
+    fi
     exit 0
 fi
 

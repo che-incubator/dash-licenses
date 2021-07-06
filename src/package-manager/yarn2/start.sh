@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 build_info_msg() {
     cat <<EOM
@@ -28,13 +28,18 @@ if [ ! -f $PROJECT_COPY_DIR/yarn.lock ]; then
     exit 1
 fi
 
+echo "Set yarn version 1.22.5..."
+yarn policies set-version 1.22.5
+echo "Done."
+echo
+
 echo "Generating all dependencies info using yarn..."
-yarn licenses list --ignore-engines --json --depth=0 --no-progres > "$TMP_DIR/yarn-deps-info.json"
+yarn licenses list --ignore-engines --ignore-optional --json --depth=0 --no-progres > "$TMP_DIR/yarn-deps-info.json"
 echo "Done."
 echo
 
 echo "Generating a temporary DEPENDENCIES file..."
-node $WORKSPACE_DIR/package-manager/yarn/parser.js | java -jar $DASH_LICENSES -summary "$TMP_DIR/DEPENDENCIES" - > /dev/null
+node $WORKSPACE_DIR/package-manager/yarn2/parser.js | java -jar $DASH_LICENSES -summary "$TMP_DIR/DEPENDENCIES" - > /dev/null
 echo "Done."
 echo
 
@@ -44,17 +49,17 @@ if [ "$(stat --format=%s $TMP_DIR/DEPENDENCIES)"  -lt  1 ]; then
 fi
 
 echo "Generating list of production dependencies using yarn..."
-yarn list --ignore-engines --json --prod --depth=0 --no-progres > $TMP_DIR/yarn-prod-deps.json
+yarn list --ignore-engines --ignore-optional --json --prod --depth=0 --no-progres > $TMP_DIR/yarn-prod-deps.json
 echo "Done."
 echo
 
 echo "Generating list of all dependencies using yarn..."
-yarn list --ignore-engines --json --depth=0 --no-progress > $TMP_DIR/yarn-all-deps.json
+yarn list --ignore-engines --ignore-optional --json --depth=0 --no-progress > $TMP_DIR/yarn-all-deps.json
 echo "Done."
 echo
 
 echo "Checking dependencies for restrictions to use..."
-node $WORKSPACE_DIR/package-manager/yarn/bump-deps.js $CHECK
+node $WORKSPACE_DIR/package-manager/yarn2/bump-deps.js $CHECK
 RESTRICTED=$?
 echo "Done."
 echo

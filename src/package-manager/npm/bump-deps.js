@@ -10,9 +10,8 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-const { join }  = require('path');
+const path = require('path');
 const { writeFileSync, existsSync, readFileSync } = require('fs');
-const { DEPS_DIR, TMP_DIR, YARN_DEPS_INFO } = require('./parser.js');
 const {
   getLogs,
   getUnresolvedNumber,
@@ -21,18 +20,22 @@ const {
   arrayToDocument
 } = require('../../document.js');
 
-const EXCLUSIONS_DIR = join(__dirname, `project/${DEPS_DIR}/EXCLUDED`);
+const ENCODING = process.env.ENCODING;
+const DEPS_DIR = process.env.DEPS_COPY_DIR;
 
-const DEPENDENCIES = `${TMP_DIR}/DEPENDENCIES`;
-const YARN_ALL_DEPS = `${TMP_DIR}/yarn-all-deps.json`;
-const YARN_PROD_DEPS = `${TMP_DIR}/yarn-prod-deps.json`;
+const TMP_DIR = path.join(DEPS_DIR, 'tmp');
+const EXCLUSIONS_DIR = path.join(DEPS_DIR, 'EXCLUDED');
+const PROD_MD = path.join(DEPS_DIR, 'prod.md');
+const DEV_MD = path.join(DEPS_DIR, 'dev.md');
+const PROBLEMS_MD = path.join(DEPS_DIR, 'problems.md');
+const YARN_DEPS_INFO = path.join(TMP_DIR, 'yarn-deps-info.json');
+const DEPENDENCIES = path.join(TMP_DIR, 'DEPENDENCIES');
+const YARN_ALL_DEPS = path.join(TMP_DIR, 'yarn-all-deps.json');
+const YARN_PROD_DEPS = path.join(TMP_DIR, 'yarn-prod-deps.json');
 
-const EXCLUDED_PROD_MD = `${EXCLUSIONS_DIR}/prod.md`;
-const EXCLUDED_DEV_MD = `${EXCLUSIONS_DIR}/dev.md`;
-const PROD_MD = `${TMP_DIR}/prod.md`;
-const DEV_MD = `${TMP_DIR}/dev.md`;
+const EXCLUDED_PROD_MD = path.join(EXCLUSIONS_DIR, 'prod.md');
+const EXCLUDED_DEV_MD = path.join(EXCLUSIONS_DIR, 'dev.md');
 
-const ENCODING = 'utf8';
 
 const depsToCQ = new Map();
 const allDependencies = new Map();
@@ -94,7 +97,7 @@ if (writeToDisk) {
 const logs = getLogs();
 if (logs) {
   if (writeToDisk) {
-    writeFileSync(`${TMP_DIR}/problems.md`, `# Dependency analysis\n${logs}`, ENCODING);
+    writeFileSync(PROBLEMS_MD, `# Dependency analysis\n${logs}`, ENCODING);
   }
   console.log(logs);
 }

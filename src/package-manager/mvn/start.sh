@@ -79,15 +79,15 @@ fi
 
 if [ -n "$DEBUG" ]; then
     echo "Copy TMP dir."
-    cp -R $TMP_DIR/* $DEPS_DIR
+    cp -RT $TMP_DIR $DEPS_DIR
     echo "Done."
     echo
 elif [ -z "$CHECK" ]; then
-    cp $TMP_DIR/prod.md $DEPS_DIR/prod.md
-    cp $TMP_DIR/dev.md $DEPS_DIR/dev.md
-    if [ -f "$TMP_DIR/problems.md" ]; then
-      cp "$TMP_DIR/problems.md" "$DEPS_DIR/problems.md"
-    elif [ -f "$DEPS_DIR/problems.md" ]; then
+    cp $DEPS_COPY_DIR/prod.md $DEPS_DIR/prod.md
+    cp $DEPS_COPY_DIR/dev.md $DEPS_DIR/dev.md
+    if [ -f "$DEPS_COPY_DIR/problems.md" ]; then
+      cp "$DEPS_COPY_DIR/problems.md" "$DEPS_DIR/problems.md"
+    elif [ -f "$DEPS_COPY_DIR/problems.md" ]; then
       rm -f "$DEPS_DIR/problems.md"
     fi
 fi

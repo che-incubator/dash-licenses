@@ -62,6 +62,7 @@ function parseDependenciesFile(fileData, dependenciesMap, allLicenses) {
 
       if (dependenciesMap.has(identifier)) {
         log += `\n${++numberUnusedExcludes}. \`${identifier}\``;
+        return;
       }
 
       const approvalLink = approvedBy === 'clearlydefined'

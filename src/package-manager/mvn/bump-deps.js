@@ -10,7 +10,7 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-const { join }  = require('path');
+const path = require('path');
 const { writeFileSync, existsSync, readFileSync } = require('fs');
 const {
   getLogs,
@@ -20,17 +20,21 @@ const {
   arrayToDocument
 } = require('../../document.js');
 
-const DEPS_DIR = '.deps';
-const TMP_DIR = `${DEPS_DIR}/tmp`;
-const EXCLUSIONS_DIR = join(__dirname, `project/${DEPS_DIR}/EXCLUDED`);
-const EXCLUDED_PROD_MD = `${EXCLUSIONS_DIR}/prod.md`;
-const EXCLUDED_DEV_MD = `${EXCLUSIONS_DIR}/dev.md`;
-const PROD_DEPENDENCIES = `${TMP_DIR}/PROD_DEPENDENCIES`;
-const DEV_DEPENDENCIES = `${TMP_DIR}/DEV_DEPENDENCIES`;
-const PROD_MD = `${TMP_DIR}/prod.md`;
-const DEV_MD = `${TMP_DIR}/dev.md`;
+const ENCODING = process.env.ENCODING;
+const DEPS_DIR = process.env.DEPS_COPY_DIR;
 
-const ENCODING = 'utf8';
+const TMP_DIR = path.join(DEPS_DIR, 'tmp');
+const EXCLUSIONS_DIR = path.join(DEPS_DIR, 'EXCLUDED');
+const EXCLUDED_PROD_MD = path.join(EXCLUSIONS_DIR, 'prod.md');
+const EXCLUDED_DEV_MD = path.join(EXCLUSIONS_DIR, 'dev.md');
+const PROD_DEPENDENCIES = path.join(TMP_DIR, 'PROD_DEPENDENCIES');
+const DEV_DEPENDENCIES = path.join(TMP_DIR, 'DEV_DEPENDENCIES');
+const PROD_MD = path.join(DEPS_DIR, 'prod.md');
+const DEV_MD = path.join(DEPS_DIR, 'dev.md');
+const PROBLEMS_MD = path.join(DEPS_DIR, 'problems.md');
+
+const prodDeps = new Map();
+const prodLicenses = new Map();
 
 const args = process.argv.slice(2);
 let writeToDisk = true;
@@ -38,8 +42,6 @@ if (args[0] === '--check') {
   writeToDisk = false;
 }
 
-const prodDeps = new Map();
-const prodLicenses = new Map();
 // parse EXCLUDED_PROD_MD file if they exist
 if (existsSync(EXCLUDED_PROD_MD)) {
   parseExcludedFileData(readFileSync(EXCLUDED_PROD_MD, ENCODING), prodDeps);
@@ -71,7 +73,7 @@ if (writeToDisk) {
 const logs = getLogs();
 if (logs) {
   if (writeToDisk) {
-    writeFileSync(`${TMP_DIR}/problems.md`, `# Dependency analysis\n${logs}`, ENCODING);
+    writeFileSync(PROBLEMS_MD, `# Dependency analysis\n${logs}`, ENCODING);
   }
   console.log(logs);
 }

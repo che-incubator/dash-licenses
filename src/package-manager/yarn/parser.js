@@ -10,27 +10,24 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-const { readFileSync } = require('fs');
+const path = require('path');
+const { existsSync, readFileSync } = require('fs');
 
-const DEPS_DIR = '.deps';
-const TMP_DIR = `${DEPS_DIR}/tmp`;
-const YARN_DEPS_INFO = `${TMP_DIR}/yarn-deps-info.json`;
+const TMP_DIR = process.env.TMP_DIR;
+const YARN_DEPS_INFO = path.join(TMP_DIR, 'yarn-deps-info.json');
 
-// get all dependencies info using `yarn`
-const allDependenciesInfoStr = readFileSync(YARN_DEPS_INFO).toString();
-const tableStartIndex = allDependenciesInfoStr.indexOf('{"type":"table"');
-if (tableStartIndex !== -1) {
-  const licenses = JSON.parse(allDependenciesInfoStr.substring(tableStartIndex));
-  const { head, body } = licenses.data;
-  body.forEach(libInfo => {
-    const libName = libInfo[head.indexOf('Name')];
-    const libVersion = libInfo[head.indexOf('Version')];
-    console.log(`${libName}@${libVersion}\n`)
-  });
+if (existsSync(YARN_DEPS_INFO)) {
+  // get all dependencies info
+  const allDependenciesInfoStr = readFileSync(YARN_DEPS_INFO).toString();
+  const tableStartIndex = allDependenciesInfoStr.indexOf('{"type":"table"');
+  if (tableStartIndex !== -1) {
+    const licenses = JSON.parse(allDependenciesInfoStr.substring(tableStartIndex));
+    const { head, body } = licenses.data;
+    body.forEach(libInfo => {
+      const libName = libInfo[head.indexOf('Name')];
+      const libVersion = libInfo[head.indexOf('Version')];
+      console.log(`${libName}@${libVersion}\n`)
+    });
+  }
 }
 
-module.exports = {
-  DEPS_DIR,
-  TMP_DIR,
-  YARN_DEPS_INFO,
-};

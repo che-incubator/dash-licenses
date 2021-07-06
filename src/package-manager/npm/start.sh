@@ -34,12 +34,12 @@ if [ ! -f $PROJECT_COPY_DIR/yarn.lock ]; then
 fi
 
 echo "Generating all dependencies info using yarn..."
-yarn licenses list --json --depth=0 --no-progres > $TMP_DIR/yarn-deps-info.json
+yarn licenses list --ignore-engines --json --depth=0 --no-progres > "$TMP_DIR/yarn-deps-info.json"
 echo "Done."
 echo
 
 echo "Generating a temporary DEPENDENCIES file..."
-node $WORKSPACE_DIR/package-manager/npm/parser.js | java -jar $DASH_LICENSES -summary $TMP_DIR/DEPENDENCIES - > /dev/null
+node $WORKSPACE_DIR/package-manager/npm/parser.js | java -jar $DASH_LICENSES -summary "$TMP_DIR/DEPENDENCIES" - > /dev/null
 echo "Done."
 echo
 
@@ -49,12 +49,12 @@ if [ "$(stat --format=%s $TMP_DIR/DEPENDENCIES)"  -lt  1 ]; then
 fi
 
 echo "Generating list of production dependencies using yarn..."
-yarn list --json --prod --depth=0 --no-progres > $TMP_DIR/yarn-prod-deps.json
+yarn list --ignore-engines --json --prod --depth=0 --no-progres > $TMP_DIR/yarn-prod-deps.json
 echo "Done."
 echo
 
 echo "Generating list of all dependencies using yarn..."
-yarn list --json --depth=0 --no-progress > $TMP_DIR/yarn-all-deps.json
+yarn list --ignore-engines --json --depth=0 --no-progress > $TMP_DIR/yarn-all-deps.json
 echo "Done."
 echo
 
@@ -84,15 +84,15 @@ fi
 
 if [ -n "$DEBUG" ]; then
     echo "Copy TMP dir."
-    cp -R $TMP_DIR/* $DEPS_DIR
+    cp -RT $TMP_DIR $DEPS_DIR
     echo "Done."
     echo
 elif [ -z "$CHECK" ]; then
-    cp $TMP_DIR/prod.md $DEPS_DIR/prod.md
-    cp $TMP_DIR/dev.md $DEPS_DIR/dev.md
-    if [ -f "$TMP_DIR/problems.md" ]; then
-      cp "$TMP_DIR/problems.md" "$DEPS_DIR/problems.md"
-    elif [ -f "$DEPS_DIR/problems.md" ]; then
+    cp $DEPS_COPY_DIR/prod.md $DEPS_DIR/prod.md
+    cp $DEPS_COPY_DIR/dev.md $DEPS_DIR/dev.md
+    if [ -f "$DEPS_COPY_DIR/problems.md" ]; then
+      cp "$DEPS_COPY_DIR/problems.md" "$DEPS_DIR/problems.md"
+    elif [ -f "$DEPS_COPY_DIR/problems.md" ]; then
       rm -f "$DEPS_DIR/problems.md"
     fi
 fi
