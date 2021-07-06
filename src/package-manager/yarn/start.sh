@@ -34,7 +34,7 @@ echo "Done."
 echo
 
 echo "Generating all dependencies info using yarn..."
-yarn licenses list --json --depth=0 --no-progres > $TMP_DIR/yarn-deps-info.json
+yarn licenses list --ignore-engines --json --depth=0 --no-progres > $TMP_DIR/yarn-deps-info.json
 echo "Done."
 echo
 
@@ -49,12 +49,12 @@ if [ "$(stat --format=%s $TMP_DIR/DEPENDENCIES)"  -lt  1 ]; then
 fi
 
 echo "Generating list of production dependencies using yarn..."
-yarn list --json --prod --depth=0 --no-progres > $TMP_DIR/yarn-prod-deps.json
+yarn list --ignore-engines --json --prod --depth=0 --no-progres > $TMP_DIR/yarn-prod-deps.json
 echo "Done."
 echo
 
 echo "Generating list of all dependencies using yarn..."
-yarn list --json --depth=0 --no-progress > $TMP_DIR/yarn-all-deps.json
+yarn list --ignore-engines --json --depth=0 --no-progress > $TMP_DIR/yarn-all-deps.json
 echo "Done."
 echo
 
