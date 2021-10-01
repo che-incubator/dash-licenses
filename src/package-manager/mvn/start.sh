@@ -24,12 +24,12 @@ if [ ! -f $PROJECT_COPY_DIR/pom.xml ]; then
 fi
 
 echo "Generating list of production dependencies using mvn..."
-mvn dependency:list | grep -Poh "\S+:(system|provided)" | sort | uniq > $TMP_DIR/mvn-prod-deps.txt
+mvn dependency:list | grep -Poh "\S+:(compile|system|provided)" | sort | uniq > $TMP_DIR/mvn-prod-deps.txt
 echo "Done."
 echo
 
 echo "Generating list of development dependencies using mvn..."
-mvn dependency:list | grep -Poh "\S+:(compile|test)" | sort | uniq > $TMP_DIR/mvn-dev-deps.txt
+mvn dependency:list | grep -Poh "\S+:(test)" | sort | uniq > $TMP_DIR/mvn-dev-deps.txt
 echo "Done."
 echo
 
