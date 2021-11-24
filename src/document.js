@@ -93,7 +93,7 @@ function arrayToDocument(title, depsArray, depToCQ, allLicenses) {
   log += '\n## UNRESOLVED ' + title + '\n';
   let unresolvedQuantity = 0;
   // table body
-  depsArray.forEach(item => {
+  depsArray.sort().forEach(item => {
     const license = allLicenses.has(item) ? allLicenses.get(item).License : '';
     let lib = `\`${item}\``;
     if (allLicenses.has(item) && allLicenses.get(item).URL) {

@@ -12,7 +12,7 @@ FROM docker.io/openjdk:15-jdk
 
 RUN microdnf install -y git
 
-ARG MAVEN_VERSION=3.8.1
+ARG MAVEN_VERSION=3.8.4
 ARG BASE_URL=https://apache.osuosl.org/maven/maven-3/${MAVEN_VERSION}/binaries
 # https://github.com/eclipse/dash-licenses/commits Jan 25, 2021
 ARG DASH_LICENSE_REV=635dc2e98c03d249a74864f8294bb68a8f163e26
