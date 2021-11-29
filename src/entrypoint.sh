@@ -91,7 +91,7 @@ cd $PROJECT_COPY_DIR
 
 if [ -f $PROJECT_COPY_DIR/pom.xml ]; then
     $WORKSPACE_DIR/package-manager/mvn/start.sh $1
-    exit 0
+    exit $?
 fi
 
 if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
@@ -100,12 +100,12 @@ if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
     elif [ -z "$CHECK" ]; then
       $WORKSPACE_DIR/package-manager/yarn2/start.sh $1
     fi
-    exit 0
+    exit $?
 fi
 
 if [ -f $PROJECT_COPY_DIR/package-lock.json ]; then
     $WORKSPACE_DIR/package-manager/npm/start.sh $1
-    exit 0
+    exit $?
 fi
 
 echo "Error: Can't find any package manager file."
