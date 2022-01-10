@@ -54,8 +54,8 @@ fi
 
 if [ ! -f $PROJECT_DIR/yarn.lock ] && [ ! -f $PROJECT_DIR/package-lock.json ] && [ ! -f $PROJECT_DIR/pom.xml ]; then
     if [ -f $PROJECT_DIR/package.json ]; then
-      echo "Error: Can't find lock file. Generate and commit the lock file and then try again."
-      exit 1
+        echo "Error: Can't find lock file. Generate and commit the lock file and then try again."
+        exit 1
     fi
     echo "Error: Can't find any package manager file."
     exit 1
@@ -94,12 +94,8 @@ if [ -f $PROJECT_COPY_DIR/pom.xml ]; then
     exit $?
 fi
 
-if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
-    if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)"  -lt  2 ]; then
-      $WORKSPACE_DIR/package-manager/yarn/start.sh $1
-    elif [ -z "$CHECK" ]; then
-      $WORKSPACE_DIR/package-manager/yarn2/start.sh $1
-    fi
+if [ -f $PROJECT_COPY_DIR/yarn.lock ] && [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -lt 2 ]; then
+    $WORKSPACE_DIR/package-manager/yarn/start.sh $1
     exit $?
 fi
 
@@ -108,5 +104,5 @@ if [ -f $PROJECT_COPY_DIR/package-lock.json ]; then
     exit $?
 fi
 
-echo "Error: Can't find any package manager file."
+echo "Error: Can't find any supported package manager file."
 exit 1
