@@ -14,7 +14,7 @@ RUN microdnf install -y git
 
 ARG MAVEN_VERSION=3.8.4
 ARG BASE_URL=https://apache.osuosl.org/maven/maven-3/${MAVEN_VERSION}/binaries
-# https://github.com/eclipse/dash-licenses/commits Dec 10, 2021
+# https://github.com/eclipse/dash-licenses/commits 10 Dec, 2021
 ARG DASH_LICENSE_REV=a9d747e83d26437685a390af5d2d5020d1c68955
 
 RUN mkdir -p /usr/local/apache-maven /usr/local/apache-maven/ref \
