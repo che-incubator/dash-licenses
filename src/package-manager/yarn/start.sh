@@ -34,7 +34,7 @@ echo "Done."
 echo
 
 echo "Generating a temporary DEPENDENCIES file..."
-node $WORKSPACE_DIR/package-manager/yarn/parser.js | java -jar $DASH_LICENSES -summary "$TMP_DIR/DEPENDENCIES" - > /dev/null
+node $WORKSPACE_DIR/package-manager/yarn/parser.js | java -jar $DASH_LICENSES -batch 500 -summary "$TMP_DIR/DEPENDENCIES" - > /dev/null
 echo "Done."
 echo
 

@@ -34,7 +34,7 @@ echo "Done."
 echo
 
 echo "Generating a temporary PROD_DEPENDENCIES file..."
-cat $TMP_DIR/mvn-prod-deps.txt | java -jar $DASH_LICENSES -summary $TMP_DIR/PROD_DEPENDENCIES - > /dev/null
+cat $TMP_DIR/mvn-prod-deps.txt | java -jar $DASH_LICENSES -batch 500 -summary $TMP_DIR/PROD_DEPENDENCIES - > /dev/null
 echo "Done."
 echo
 
@@ -44,7 +44,7 @@ if [ "$(stat --format=%s $TMP_DIR/PROD_DEPENDENCIES)"  -lt  1 ]; then
 fi
 
 echo "Generating a temporary DEV_DEPENDENCIES file..."
-cat $TMP_DIR/mvn-dev-deps.txt | java -jar $DASH_LICENSES -summary $TMP_DIR/DEV_DEPENDENCIES - > /dev/null
+cat $TMP_DIR/mvn-dev-deps.txt | java -jar $DASH_LICENSES -batch 500 -summary $TMP_DIR/DEV_DEPENDENCIES - > /dev/null
 echo "Done."
 echo
 

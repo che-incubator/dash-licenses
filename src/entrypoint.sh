@@ -71,13 +71,13 @@ fi
 
 echo "Copy project..."
 mkdir -p $PROJECT_COPY_DIR
-cp -RT $PROJECT_DIR $PROJECT_COPY_DIR
+rsync -amqP --exclude='node_modules' "$PROJECT_DIR/" $PROJECT_COPY_DIR
 echo "Done."
 echo
 
 if [ ! -d $TMP_DIR ]; then
     echo "Create tmp dir..."
-    mkdir $TMP_DIR
+    mkdir -p $TMP_DIR
     echo "Done."
 fi
 
