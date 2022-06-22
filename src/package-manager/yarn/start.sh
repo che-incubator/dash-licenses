@@ -29,7 +29,7 @@ if [ ! -f $PROJECT_COPY_DIR/yarn.lock ]; then
 fi
 
 echo "Generating all dependencies info using yarn..."
-yarn licenses list --ignore-engines --json --depth=0 --no-progres > "$TMP_DIR/yarn-deps-info.json"
+yarn licenses list --ignore-engines --json --depth=0 --no-progres --network-timeout 300000 > "$TMP_DIR/yarn-deps-info.json"
 echo "Done."
 echo
 
