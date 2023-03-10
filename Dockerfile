@@ -8,14 +8,14 @@
 # Contributors:
 #   Red Hat, Inc. - initial API and implementation
 
-FROM docker.io/openjdk:16-jdk
+FROM docker.io/openjdk:20-jdk
 
 RUN microdnf install -y git rsync
 
-ARG MAVEN_VERSION=3.8.6
+ARG MAVEN_VERSION=3.9.0
 ARG BASE_URL=https://apache.osuosl.org/maven/maven-3/${MAVEN_VERSION}/binaries
-# https://github.com/eclipse/dash-licenses/commits May 18, 2022
-ARG DASH_LICENSE_REV=6d3828a707cbeffff8280471a9241db6e69b4b47
+# https://github.com/eclipse/dash-licenses/commits Feb 24, 2023
+ARG DASH_LICENSE_REV=70fec024c962854f5928c98e1045e4372692d436
 
 RUN mkdir -p /usr/local/apache-maven /usr/local/apache-maven/ref \
   && curl -fsSL -o /tmp/apache-maven.tar.gz ${BASE_URL}/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
@@ -23,7 +23,7 @@ RUN mkdir -p /usr/local/apache-maven /usr/local/apache-maven/ref \
   && rm -f /tmp/apache-maven.tar.gz \
   && ln -s /usr/local/apache-maven/bin/mvn /usr/bin/mvn
 
-ENV NODE_VERSION=v16.13.2
+ENV NODE_VERSION=v18.15.0
 ENV NODE_DISTRO=linux-x64
 ENV NODE_BASE_URL=https://nodejs.org/dist/${NODE_VERSION}
 
