@@ -8,14 +8,14 @@
 # Contributors:
 #   Red Hat, Inc. - initial API and implementation
 
-FROM docker.io/openjdk:20-jdk
+FROM docker.io/openjdk:22-jdk
 
 RUN microdnf install -y git rsync
 
-ARG MAVEN_VERSION=3.9.0
+ARG MAVEN_VERSION=3.9.4
 ARG BASE_URL=https://apache.osuosl.org/maven/maven-3/${MAVEN_VERSION}/binaries
-# https://github.com/eclipse/dash-licenses/commits Feb 24, 2023
-ARG DASH_LICENSE_REV=70fec024c962854f5928c98e1045e4372692d436
+# https://github.com/eclipse/dash-licenses/commits Dec 1, 2023
+ARG DASH_LICENSE_REV=ae1b213b2c23ffab28250af7d35fa44ddb1d9d7a
 
 RUN mkdir -p /usr/local/apache-maven /usr/local/apache-maven/ref \
   && curl -fsSL -o /tmp/apache-maven.tar.gz ${BASE_URL}/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
@@ -37,12 +37,14 @@ ENV PATH=/usr/local/lib/nodejs/node-${NODE_VERSION}-${NODE_DISTRO}/bin/:$PATH
 RUN npm install yarn synp -g
 
 WORKDIR /workspace
-RUN git clone https://github.com/eclipse/dash-licenses.git && \
-  cd dash-licenses && \
-  git checkout ${DASH_LICENSE_REV} && \
-  mvn clean install -DskipTests && \
-  cp core/target/org.eclipse.dash.licenses-0.0.1-SNAPSHOT.jar /workspace/dash-licenses.jar
+RUN git clone https://github.com/eclipse/dash-licenses.git
 
+WORKDIR /workspace/dash-licenses
+RUN git checkout ${DASH_LICENSE_REV} && \
+  mvn clean install -DskipTests && \
+  mv shaded/target/org.eclipse.dash.licenses-1.1.1-SNAPSHOT.jar /workspace/dash-licenses.jar
+
+WORKDIR /workspace
 COPY ${PWD}/src/package-manager package-manager
 COPY ${PWD}/src/entrypoint.sh entrypoint.sh
 COPY ${PWD}/src/document.js document.js
