@@ -45,7 +45,6 @@ RUN curl -fsSL ${DASH_LICENSE_URL} -o dash-licenses-${DASH_LICENSE_REV}.tar.gz \
   && mv /workspace/dash-licenses-${DASH_LICENSE_REV}/shaded/target/org.eclipse.dash.licenses-${DASH_LICENSE_REV}.jar /workspace/dash-licenses.jar \
   && rm /workspace/dash-licenses-${DASH_LICENSE_REV} -rf
 
-WORKDIR /workspace
 COPY ${PWD}/src/package-manager package-manager
 COPY ${PWD}/src/entrypoint.sh entrypoint.sh
 COPY ${PWD}/src/document.js document.js
