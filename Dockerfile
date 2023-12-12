@@ -8,41 +8,42 @@
 # Contributors:
 #   Red Hat, Inc. - initial API and implementation
 
-FROM docker.io/openjdk:22-jdk
+FROM docker.io/openjdk:22-jdk-slim
 
-RUN microdnf install -y git rsync
+RUN apt-get update && apt-get install -y git rsync curl && apt-get clean all
 
-ARG MAVEN_VERSION=3.9.4
-ARG BASE_URL=https://apache.osuosl.org/maven/maven-3/${MAVEN_VERSION}/binaries
-# https://github.com/eclipse/dash-licenses/commits Dec 1, 2023
-ARG DASH_LICENSE_REV=ae1b213b2c23ffab28250af7d35fa44ddb1d9d7a
+ARG MAVEN_VERSION=3.9.6
+ARG MAVEN_BASE_URL=https://apache.osuosl.org/maven/maven-3/${MAVEN_VERSION}/binaries
 
 RUN mkdir -p /usr/local/apache-maven /usr/local/apache-maven/ref \
-  && curl -fsSL -o /tmp/apache-maven.tar.gz ${BASE_URL}/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
+  && curl -fsSL -o /tmp/apache-maven.tar.gz ${MAVEN_BASE_URL}/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
   && tar -xzf /tmp/apache-maven.tar.gz -C /usr/local/apache-maven --strip-components=1 \
   && rm -f /tmp/apache-maven.tar.gz \
   && ln -s /usr/local/apache-maven/bin/mvn /usr/bin/mvn
 
-ENV NODE_VERSION=v18.15.0
-ENV NODE_DISTRO=linux-x64
-ENV NODE_BASE_URL=https://nodejs.org/dist/${NODE_VERSION}
+ARG NODE_VERSION=v21.4.0
+ARG NODE_DISTRO=linux-x64
+ARG NODE_BASE_URL=https://nodejs.org/dist/${NODE_VERSION}
 
 RUN curl -fsSL ${NODE_BASE_URL}/node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz -o node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz \
   && mkdir -p /usr/local/lib/nodejs \
   && tar -xzf node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz -C /usr/local/lib/nodejs \
   && rm node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz
-
 ENV PATH=/usr/local/lib/nodejs/node-${NODE_VERSION}-${NODE_DISTRO}/bin/:$PATH
 
 RUN npm install yarn synp -g
 
-WORKDIR /workspace
-RUN git clone https://github.com/eclipse/dash-licenses.git
+ARG DASH_LICENSE_REV=1.1.0
+ARG DASH_LICENSE_URL=https://github.com/eclipse/dash-licenses/archive/refs/tags/${DASH_LICENSE_REV}.tar.gz
 
-WORKDIR /workspace/dash-licenses
-RUN git checkout ${DASH_LICENSE_REV} && \
-  mvn clean install -DskipTests && \
-  mv shaded/target/org.eclipse.dash.licenses-1.1.1-SNAPSHOT.jar /workspace/dash-licenses.jar
+WORKDIR /workspace
+RUN curl -fsSL ${DASH_LICENSE_URL} -o dash-licenses-${DASH_LICENSE_REV}.tar.gz \
+  && tar -xzf dash-licenses-${DASH_LICENSE_REV}.tar.gz \
+  && rm dash-licenses-${DASH_LICENSE_REV}.tar.gz \
+  && cd dash-licenses-${DASH_LICENSE_REV} \
+  && mvn clean install -DskipTests \
+  && mv /workspace/dash-licenses-${DASH_LICENSE_REV}/shaded/target/org.eclipse.dash.licenses-${DASH_LICENSE_REV}.jar /workspace/dash-licenses.jar \
+  && rm /workspace/dash-licenses-${DASH_LICENSE_REV} -rf
 
 WORKDIR /workspace
 COPY ${PWD}/src/package-manager package-manager
