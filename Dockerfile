@@ -8,28 +8,7 @@
 # Contributors:
 #   Red Hat, Inc. - initial API and implementation
 
-FROM docker.io/openjdk:22-jdk-slim
-
-RUN apt-get update && apt-get install -y git rsync curl && apt-get clean all
-
-ARG MAVEN_VERSION=3.9.6
-ARG MAVEN_BASE_URL=https://apache.osuosl.org/maven/maven-3/${MAVEN_VERSION}/binaries
-
-RUN mkdir -p /usr/local/apache-maven /usr/local/apache-maven/ref \
-  && curl -fsSL -o /tmp/apache-maven.tar.gz ${MAVEN_BASE_URL}/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
-  && tar -xzf /tmp/apache-maven.tar.gz -C /usr/local/apache-maven --strip-components=1 \
-  && rm -f /tmp/apache-maven.tar.gz \
-  && ln -s /usr/local/apache-maven/bin/mvn /usr/bin/mvn
-
-ARG NODE_VERSION=v21.4.0
-ARG NODE_DISTRO=linux-x64
-ARG NODE_BASE_URL=https://nodejs.org/dist/${NODE_VERSION}
-
-RUN curl -fsSL ${NODE_BASE_URL}/node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz -o node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz \
-  && mkdir -p /usr/local/lib/nodejs \
-  && tar -xzf node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz -C /usr/local/lib/nodejs \
-  && rm node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz
-ENV PATH=/usr/local/lib/nodejs/node-${NODE_VERSION}-${NODE_DISTRO}/bin/:$PATH
+FROM quay.io/devfile/universal-developer-image:ubi8-latest
 
 RUN npm install yarn synp -g
 
