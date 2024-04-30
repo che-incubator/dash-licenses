@@ -8,20 +8,12 @@
 # Contributors:
 #   Red Hat, Inc. - initial API and implementation
 
-FROM quay.io/ubi8/openjdk-21:latest
+FROM registry.access.redhat.com/ubi8/openjdk-21:latest
 
-RUN microdnf install -y git rsync
+USER 0
 
-ARG MAVEN_VERSION=3.9.6
-ARG BASE_URL=https://apache.osuosl.org/maven/maven-3/${MAVEN_VERSION}/binaries
-# https://github.com/eclipse/dash-licenses/commits Apr 23, 2024
-ARG DASH_LICENSE_REV=0001fc18bde5b736ca659b37b429ee55b8610efb
-
-RUN mkdir -p /usr/local/apache-maven /usr/local/apache-maven/ref \
-  && curl -fsSL -o /tmp/apache-maven.tar.gz ${BASE_URL}/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
-  && tar -xzf /tmp/apache-maven.tar.gz -C /usr/local/apache-maven --strip-components=1 \
-  && rm -f /tmp/apache-maven.tar.gz \
-  && ln -s /usr/local/apache-maven/bin/mvn /usr/bin/mvn
+RUN microdnf install -y git rsync \
+    && microdnf clean all
 
 ENV NODE_VERSION=v20.12.0
 ENV NODE_DISTRO=linux-x64
@@ -51,6 +43,13 @@ RUN curl -fsSL ${DASH_LICENSE_URL} -o dash-licenses-${DASH_LICENSE_REV}.tar.gz \
 COPY ${PWD}/src/package-manager package-manager
 COPY ${PWD}/src/entrypoint.sh entrypoint.sh
 COPY ${PWD}/src/document.js document.js
+
+RUN useradd -u 10001 -G wheel,root -d /home/user --shell /bin/bash -m user \
+    && chgrp -R 0 /home \
+    && chmod -R g=u /etc/passwd /etc/group /home /workspace
+
+USER 10001
+ENV HOME=/home/user
 
 ENTRYPOINT ["/workspace/entrypoint.sh"]
 CMD ["--generate"]
