@@ -8,7 +8,7 @@
 # Contributors:
 #   Red Hat, Inc. - initial API and implementation
 
-FROM docker.io/openjdk:23-jdk
+FROM quay.io/ubi8/openjdk-21:latest
 
 RUN microdnf install -y git rsync
 
