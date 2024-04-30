@@ -13,7 +13,7 @@ It supports the following package managers:
 ## Build
 
 ```sh
-./build.sh
+scripts/build.sh
 ```
 
 ## Usage
