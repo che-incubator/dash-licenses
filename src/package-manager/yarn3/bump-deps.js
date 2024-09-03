@@ -30,7 +30,8 @@ const DEV_MD = path.join(DEPS_DIR, 'dev.md');
 const PROBLEMS_MD = path.join(DEPS_DIR, 'problems.md');
 const YARN_DEPS_INFO = path.join(TMP_DIR, 'yarn-deps-info.json');
 const DEPENDENCIES = path.join(TMP_DIR, 'DEPENDENCIES');
-const YARN_ALL_DEPS = path.join(TMP_DIR, 'yarn-all-deps.json');
+
+// const YARN_ALL_DEPS = path.join(TMP_DIR, 'yarn-all-deps.json');
 const YARN_PROD_DEPS = path.join(TMP_DIR, 'yarn-prod-deps.json');
 
 const EXCLUDED_PROD_MD = path.join(EXCLUSIONS_DIR, 'prod.md');
@@ -46,18 +47,17 @@ if (args[0] === '--check') {
 }
 
 // get all dependencies info using `yarn`
-const allDependenciesInfoStr = readFileSync(YARN_DEPS_INFO).toString();
-const tableStartIndex = allDependenciesInfoStr.indexOf('{"type":"table"');
-if (tableStartIndex !== -1) {
-  const licenses = JSON.parse(allDependenciesInfoStr.substring(tableStartIndex));
-  const { head, body } = licenses.data;
-  body.forEach(libInfo => {
-    allDependencies.set(`${libInfo[head.indexOf('Name')]}@${libInfo[head.indexOf('Version')]}`, {
-      License: libInfo[head.indexOf('License')],
-      URL: libInfo[head.indexOf('URL')] === 'Unknown' ? undefined : libInfo[head.indexOf('URL')]
-    });
-  })
-}
+const allDependenciesInfo = readFileSync(YARN_DEPS_INFO).toString().trim();
+(allDependenciesInfo.split('\n')).forEach(line => {
+  const { value, children } = JSON.parse(line);
+  const keys = Object.keys(children);
+  keys.filter(val => val.includes('@npm:') | val.includes('@virtual:')).forEach(key => {
+    const key_ = key
+        .replace(/@npm:/g, '@')
+        .replace(/@virtual:.+#npm:/g, '@');
+    allDependencies.set(key_, { License: value, URL: children[key]['children']['url'] });
+  });
+})
 
 if (existsSync(EXCLUDED_PROD_MD)) {
   parseExcludedFileData(readFileSync(EXCLUDED_PROD_MD, ENCODING), depsToCQ);
@@ -67,17 +67,18 @@ if (existsSync(EXCLUDED_PROD_MD)) {
 parseDependenciesFile(readFileSync(DEPENDENCIES, ENCODING), depsToCQ);
 
 // list of prod dependencies names
-const yarnProdDepsStr = readFileSync(YARN_PROD_DEPS).toString();
-const yarnProdDepsTree = JSON.parse(yarnProdDepsStr);
-const yarnProdDeps = extractDependencies(yarnProdDepsTree);
+const yarnProdDepsInfo = readFileSync(YARN_PROD_DEPS).toString().trim().split('\n');
+const yarnProdDeps = extractDependencies(yarnProdDepsInfo);
 
 // list of all dependencies names
-const yarnAllDepsStr = readFileSync(YARN_ALL_DEPS).toString();
-const yarnAllDepsTree = JSON.parse(yarnAllDepsStr);
-const yarnAllDeps = extractDependencies(yarnAllDepsTree);
+const yarnAllDeps = [];
+allDependencies.forEach((value, key) => {
+  yarnAllDeps.push(key);
+});
+yarnAllDeps.sort();
 
 // build list of development dependencies
-const yarnDevDeps = yarnAllDeps.filter(entry => yarnProdDeps.includes(entry) === false);
+const yarnDevDeps = yarnAllDeps.filter(entry => !yarnProdDeps.includes(entry));
 
 const prodDepsData = arrayToDocument('Production dependencies', yarnProdDeps, depsToCQ, allDependencies);
 if (writeToDisk) {
@@ -105,9 +106,18 @@ if (getUnresolvedNumber() > 0) {
   process.exit(1);
 }
 
-function extractDependencies(obj) {
-  if (!obj || !obj.data || !obj.data.trees) {
-    return [];
-  }
-  return obj.data.trees.map(entry => entry.name).sort();
+function extractDependencies(dependenciesInfo) {
+  const allDependencies = [];
+  (dependenciesInfo).forEach(line => {
+    const {children} = JSON.parse(line);
+    const keys = Object.keys(children);
+    keys.filter(val => val.includes('@npm:') | val.includes('@virtual:')).forEach(key => {
+      const key_ = key
+          .replace(/@npm:/g, '@')
+          .replace(/@virtual:.+#npm:/g, '@');
+      allDependencies.push(key_);
+    });
+  })
+
+  return allDependencies;
 }
