@@ -81,7 +81,6 @@ if [ ! -d $TMP_DIR ]; then
     echo "Done."
 fi
 
-DASH_LICENSES=$WORKSPACE_DIR/dash-licenses.jar
 if [ ! -f $DASH_LICENSES ]; then
     echo "Error: Can't find dash-licenses.jar. Contact https://github.com/che-incubator/dash-licenses maintainers to fix the issue."
     exit 1
@@ -94,9 +93,15 @@ if [ -f $PROJECT_COPY_DIR/pom.xml ]; then
     exit $?
 fi
 
-if [ -f $PROJECT_COPY_DIR/yarn.lock ] && [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -lt 2 ]; then
-    $WORKSPACE_DIR/package-manager/yarn/start.sh $1
-    exit $?
+if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
+    if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -lt 2 ]; then
+        $WORKSPACE_DIR/package-manager/yarn/start.sh $1
+        exit $?
+    fi
+    if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -lt 4 ]; then
+    $WORKSPACE_DIR/package-manager/yarn3/start.sh $1
+        exit $?
+    fi
 fi
 
 if [ -f $PROJECT_COPY_DIR/package-lock.json ]; then

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Red Hat, Inc.
+ * Copyright (c) 2018-2024 Red Hat, Inc.
  * This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License 2.0
  * which is available at https://www.eclipse.org/legal/epl-2.0/
@@ -74,6 +74,7 @@ function parseDependenciesFile(fileData, dependenciesMap, allLicenses) {
     logs += log + '\n';
   }
 }
+
 function cqNumberToLink(cqNumber) {
   const number = parseInt(cqNumber.replace('CQ', ''), 10);
   if (!number) {
@@ -96,7 +97,7 @@ function arrayToDocument(title, depsArray, depToCQ, allLicenses) {
   depsArray.sort().forEach(item => {
     const license = allLicenses.has(item) ? allLicenses.get(item).License : '';
     let lib = `\`${item}\``;
-    if (allLicenses.has(item) && allLicenses.get(item).URL) {
+    if (allLicenses.get(item)?.URL) {
       lib = `[${lib}](${allLicenses.get(item).URL})`;
     }
     let cq = '';
