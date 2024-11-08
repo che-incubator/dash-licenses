@@ -52,6 +52,14 @@ if [ "$(stat --format=%s $TMP_DIR/DEPENDENCIES)"  -lt  1 ]; then
   exit 1
 fi
 
+echo "Checking for yarn version..."
+if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -ne "3" ]; then
+  echo "Installing yarn version 3..."
+  yarn set version 3.8.6
+fi
+echo "Done."
+echo
+
 echo "importing yarn plugin licenses..."
 yarn plugin import https://raw.githubusercontent.com/mhassan1/yarn-plugin-licenses/v0.7.0/bundles/@yarnpkg/plugin-licenses.js
 echo "Done."
