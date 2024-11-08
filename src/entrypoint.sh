@@ -98,8 +98,8 @@ if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
         $WORKSPACE_DIR/package-manager/yarn/start.sh $1
         exit $?
     fi
-    if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -lt 4 ]; then
-    $WORKSPACE_DIR/package-manager/yarn3/start.sh $1
+    if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -le 4 ]; then
+        $WORKSPACE_DIR/package-manager/yarn3/start.sh $1
         exit $?
     fi
 fi
