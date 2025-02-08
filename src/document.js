@@ -45,7 +45,7 @@ function parseDependenciesFile(fileData, dependenciesMap, allLicenses) {
       const identifier = scope === '-'
           ? `${name}@${version}`
           : `${scope}/${name}@${version}`;
-      allLicenses.set(identifier, { License: license ? license : '-' });
+      allLicenses.set(identifier, { License: license ? license.trim().split(' ')[0] : '' });
     });
   }
   deps.filter(lineData => {
@@ -65,23 +65,16 @@ function parseDependenciesFile(fileData, dependenciesMap, allLicenses) {
         return;
       }
 
-      const approvalLink = approvedBy === 'clearlydefined'
-        ? approvedBy
-        : cqNumberToLink(approvedBy);
-      dependenciesMap.set(identifier, approvalLink);
+      if (approvedBy === 'clearlydefined') {
+        const link = `[clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/${scope}/${name}/${version})`;
+        dependenciesMap.set(identifier, link);
+      } else {
+        dependenciesMap.set(identifier, approvedBy);
+      }
     });
   if (numberUnusedExcludes > 0) {
     logs += log + '\n';
   }
-}
-
-function cqNumberToLink(cqNumber) {
-  const number = parseInt(cqNumber.replace('CQ', ''), 10);
-  if (!number) {
-    console.warn(`Warning: failed to parse CQ number from string: "${cqNumber}"`);
-    return cqNumber;
-  }
-  return `[${cqNumber}](https://dev.eclipse.org/ipzilla/show_bug.cgi?id=${number})`;
 }
 
 // create output document

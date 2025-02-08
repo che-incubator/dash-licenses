@@ -23,18 +23,8 @@ if [ ! -f $PROJECT_COPY_DIR/package.json ]; then
     exit 1
 fi
 
-echo "Converting package-lock.json to yarn.lock..."
-synp --source-file package-lock.json
-echo "Done."
-echo
-
-if [ ! -f $PROJECT_COPY_DIR/yarn.lock ]; then
-    echo "Error: Can't find yarn.lock file. Generate and commit the lock file and then try again."
-    exit 1
-fi
-
-echo "Generating all dependencies info using yarn..."
-yarn licenses list --ignore-engines --json --depth=0 --no-progres > "$TMP_DIR/yarn-deps-info.json"
+echo "Chenging directory to $PROJECT_COPY_DIR..."
+cd $PROJECT_COPY_DIR
 echo "Done."
 echo
 
@@ -47,16 +37,6 @@ if [ "$(stat --format=%s $TMP_DIR/DEPENDENCIES)"  -lt  1 ]; then
   echo "Error: Can't create a temporary DEPENDENCIES file. Check internet connection and try again."
   exit 1
 fi
-
-echo "Generating list of production dependencies using yarn..."
-yarn list --ignore-engines --json --prod --depth=0 --no-progres > $TMP_DIR/yarn-prod-deps.json
-echo "Done."
-echo
-
-echo "Generating list of all dependencies using yarn..."
-yarn list --ignore-engines --json --depth=0 --no-progress > $TMP_DIR/yarn-all-deps.json
-echo "Done."
-echo
 
 echo "Checking dependencies for restrictions to use..."
 node $WORKSPACE_DIR/package-manager/npm/bump-deps.js $CHECK

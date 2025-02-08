@@ -11,22 +11,29 @@
  */
 
 const path = require('path');
-const { existsSync, readFileSync } = require('fs');
+const { existsSync, readFileSync, writeFileSync } = require('fs');
 
-const TMP_DIR = process.env.TMP_DIR;
-const YARN_DEPS_INFO = path.join(TMP_DIR, 'yarn-deps-info.json');
+const DEPENDENCIES_INFO = path.join(process.env.TMP_DIR, 'dependencies-info.json');
+const PACKAGE_LOCK_JSON = path.join(process.env.PROJECT_COPY_DIR, 'package-lock.json');
 
-if (existsSync(YARN_DEPS_INFO)) {
-  // get all dependencies info
-  const allDependenciesInfoStr = readFileSync(YARN_DEPS_INFO).toString();
-  const tableStartIndex = allDependenciesInfoStr.indexOf('{"type":"table"');
-  if (tableStartIndex !== -1) {
-    const licenses = JSON.parse(allDependenciesInfoStr.substring(tableStartIndex));
-    const { head, body } = licenses.data;
-    body.forEach(libInfo => {
-      const libName = libInfo[head.indexOf('Name')];
-      const libVersion = libInfo[head.indexOf('Version')];
-      console.log(`${libName}@${libVersion}\n`)
-    });
-  }
+const allDeps = {
+  dependencies: [],
+  devDependencies: []
+};
+
+if (existsSync(PACKAGE_LOCK_JSON)) {
+  const { packages } = JSON.parse(readFileSync(PACKAGE_LOCK_JSON).toString());
+  Object.keys(packages).forEach(packageKey => {
+    if (packageKey) {
+      const _namesArr	 = packageKey.replace(/node_modules\//g, " ").trim().split(' ');
+      const packageName = _namesArr[_namesArr.length - 1] + '@' + packages[packageKey].version;
+      if (packages[packageKey].dev === true) {
+        allDeps.devDependencies.push(packageName);
+      } else {
+        allDeps.dependencies.push(packageName);
+      }
+    }
+  });
+  writeFileSync(DEPENDENCIES_INFO, JSON.stringify(allDeps, null, 2));
+  console.log([...allDeps.dependencies, ...allDeps.devDependencies].join('\n'));
 }
