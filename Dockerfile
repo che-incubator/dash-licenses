@@ -15,7 +15,7 @@ USER 0
 RUN microdnf install -y git rsync \
     && microdnf clean all
 
-ENV NODE_VERSION=v20.12.0
+ENV NODE_VERSION=v20.18.0
 ENV NODE_DISTRO=linux-x64
 ENV NODE_BASE_URL=https://nodejs.org/dist/${NODE_VERSION}
 

@@ -93,20 +93,22 @@ if [ -f $PROJECT_COPY_DIR/pom.xml ]; then
     exit $?
 fi
 
-if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
-    if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -lt 2 ]; then
-        $WORKSPACE_DIR/package-manager/yarn/start.sh $1
-        exit $?
-    fi
-    if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -le 4 ]; then
-        $WORKSPACE_DIR/package-manager/yarn3/start.sh $1
-        exit $?
-    fi
-fi
+if [ -f $PROJECT_COPY_DIR/package.json ]; then
+  if [ -f $PROJECT_COPY_DIR/package-lock.json ]; then
+      $WORKSPACE_DIR/package-manager/npm/start.sh $1
+      exit $?
+  fi
 
-if [ -f $PROJECT_COPY_DIR/package-lock.json ]; then
-    $WORKSPACE_DIR/package-manager/npm/start.sh $1
-    exit $?
+  if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
+      if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -lt 2 ]; then
+          $WORKSPACE_DIR/package-manager/yarn/start.sh $1
+          exit $?
+      fi
+      if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -le 4 ]; then
+          $WORKSPACE_DIR/package-manager/yarn3/start.sh $1
+          exit $?
+      fi
+  fi
 fi
 
 echo "Error: Can't find any supported package manager file."

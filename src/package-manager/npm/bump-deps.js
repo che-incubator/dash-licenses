@@ -28,11 +28,8 @@ const EXCLUSIONS_DIR = path.join(DEPS_DIR, 'EXCLUDED');
 const PROD_MD = path.join(DEPS_DIR, 'prod.md');
 const DEV_MD = path.join(DEPS_DIR, 'dev.md');
 const PROBLEMS_MD = path.join(DEPS_DIR, 'problems.md');
-const YARN_DEPS_INFO = path.join(TMP_DIR, 'yarn-deps-info.json');
 const DEPENDENCIES = path.join(TMP_DIR, 'DEPENDENCIES');
-const YARN_ALL_DEPS = path.join(TMP_DIR, 'yarn-all-deps.json');
-const YARN_PROD_DEPS = path.join(TMP_DIR, 'yarn-prod-deps.json');
-
+const DEPENDENCIES_INFO = path.join(TMP_DIR, 'dependencies-info.json');
 const EXCLUDED_PROD_MD = path.join(EXCLUSIONS_DIR, 'prod.md');
 const EXCLUDED_DEV_MD = path.join(EXCLUSIONS_DIR, 'dev.md');
 
@@ -46,41 +43,24 @@ if (args[0] === '--check') {
   writeToDisk = false;
 }
 
-// get all dependencies info using `yarn`
-const allDependenciesInfoStr = readFileSync(YARN_DEPS_INFO).toString();
-const tableStartIndex = allDependenciesInfoStr.indexOf('{"type":"table"');
-if (tableStartIndex !== -1) {
-  const licenses = JSON.parse(allDependenciesInfoStr.substring(tableStartIndex));
-  const { head, body } = licenses.data;
-  body.forEach(libInfo => {
-    allDependencies.set(`${libInfo[head.indexOf('Name')]}@${libInfo[head.indexOf('Version')]}`, {
-      License: libInfo[head.indexOf('License')],
-      URL: libInfo[head.indexOf('URL')] === 'Unknown' ? undefined : libInfo[head.indexOf('URL')]
-    });
-  })
-}
+// get dependencies info
+const depsInfo = JSON.parse(readFileSync(DEPENDENCIES_INFO));
+const prodDeps = depsInfo.dependencies;
+const devDeps = depsInfo.devDependencies;
+const allDeps = [...prodDeps, ...devDeps];
+allDeps.forEach(lib => allDependencies.set(lib, {}));
 
 if (existsSync(EXCLUDED_PROD_MD)) {
   parseExcludedFileData(readFileSync(EXCLUDED_PROD_MD, ENCODING), depsToCQ);
 }
 
 // parse DEPENDENCIES file
-parseDependenciesFile(readFileSync(DEPENDENCIES, ENCODING), depsToCQ);
+const dependenciesStr = readFileSync(DEPENDENCIES, ENCODING);
+parseDependenciesFile(dependenciesStr, depsToCQ, allDependencies);
 
-// list of prod dependencies names
-const yarnProdDepsStr = readFileSync(YARN_PROD_DEPS).toString();
-const yarnProdDepsTree = JSON.parse(yarnProdDepsStr);
-const yarnProdDeps = extractYarnDependencies(yarnProdDepsTree);
+// process.exit(1);
 
-// list of all dependencies names
-const yarnAllDepsStr = readFileSync(YARN_ALL_DEPS).toString();
-const yarnAllDepsTree = JSON.parse(yarnAllDepsStr);
-const yarnAllDeps = extractYarnDependencies(yarnAllDepsTree);
-
-// build list of development dependencies
-const yarnDevDeps = yarnAllDeps.filter(entry => yarnProdDeps.includes(entry) === false);
-
-const prodDepsData = arrayToDocument('Production dependencies', yarnProdDeps, depsToCQ, allDependencies);
+const prodDepsData = arrayToDocument('Production dependencies', prodDeps, depsToCQ, allDependencies);
 if (writeToDisk) {
   writeFileSync(PROD_MD, prodDepsData, ENCODING);
 }
@@ -89,7 +69,8 @@ if (existsSync(EXCLUDED_DEV_MD)) {
   parseExcludedFileData(readFileSync(EXCLUDED_DEV_MD, ENCODING), depsToCQ);
 }
 
-const devDepsData = arrayToDocument('Development dependencies', yarnDevDeps, depsToCQ, allDependencies);
+const devDepsData = arrayToDocument('Development dependencies', devDeps, depsToCQ, allDependencies);
+
 if (writeToDisk) {
   writeFileSync(DEV_MD, devDepsData, ENCODING);
 }
@@ -104,11 +85,4 @@ if (logs) {
 
 if (getUnresolvedNumber() > 0) {
   process.exit(1);
-}
-
-function extractYarnDependencies(obj) {
-  if (!obj || !obj.data || !obj.data.trees) {
-    return [];
-  }
-  return obj.data.trees.map(entry => entry.name).sort();
 }
