@@ -26,14 +26,9 @@ if [ "$1" != "--help" ] && [ "$1" != "--check" ] && [ "$1" != "--generate" ] && 
     exit 0
 fi
 
-CHECK=""
+EXIT_CODE=0
 if [ "$1" = "--check" ]; then
-    CHECK="$1"
-fi
-
-DEBUG=""
-if [ "$1" = "--debug" ]; then
-    DEBUG="$1"
+    EXIT_CODE=1
 fi
 
 export ENCODING=utf8
@@ -49,16 +44,16 @@ export DASH_LICENSES=$WORKSPACE_DIR/dash-licenses.jar
 if [ ! -d $PROJECT_DIR ]; then
     echo
     echo "Error: The project directory is not mounted."
-    exit 1
+    exit $EXIT_CODE
 fi
 
 if [ ! -f $PROJECT_DIR/yarn.lock ] && [ ! -f $PROJECT_DIR/package-lock.json ] && [ ! -f $PROJECT_DIR/pom.xml ]; then
     if [ -f $PROJECT_DIR/package.json ]; then
         echo "Error: Can't find lock file. Generate and commit the lock file and then try again."
-        exit 1
+        exit $EXIT_CODE
     fi
     echo "Error: Can't find any package manager file."
-    exit 1
+    exit $EXIT_CODE
 fi
 
 if [ ! -d $DEPS_DIR ]; then
@@ -83,7 +78,7 @@ fi
 
 if [ ! -f $DASH_LICENSES ]; then
     echo "Error: Can't find dash-licenses.jar. Contact https://github.com/che-incubator/dash-licenses maintainers to fix the issue."
-    exit 1
+    exit $EXIT_CODE
 fi
 
 cd $PROJECT_COPY_DIR
@@ -112,4 +107,4 @@ if [ -f $PROJECT_COPY_DIR/package.json ]; then
 fi
 
 echo "Error: Can't find any supported package manager file."
-exit 1
+exit $EXIT_CODE
