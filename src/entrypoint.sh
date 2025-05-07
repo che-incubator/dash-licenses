@@ -54,6 +54,7 @@ if [ ! -f $PROJECT_DIR/yarn.lock ] && [ ! -f $PROJECT_DIR/package-lock.json ] &&
         exit $EXIT_CODE
     fi
     echo "Error: Can't find any package manager file."
+    ls -la $PROJECT_DIR
     exit $EXIT_CODE
 fi
 
