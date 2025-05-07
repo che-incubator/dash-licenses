@@ -50,6 +50,7 @@ fi
 if [ ! -f $PROJECT_DIR/yarn.lock ] && [ ! -f $PROJECT_DIR/package-lock.json ] && [ ! -f $PROJECT_DIR/pom.xml ]; then
     if [ -f $PROJECT_DIR/package.json ]; then
         echo "Error: Can't find lock file. Generate and commit the lock file and then try again."
+        ls -la $PROJECT_DIR
         exit $EXIT_CODE
     fi
     echo "Error: Can't find any package manager file."
