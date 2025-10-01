@@ -16,15 +16,24 @@ RUN microdnf install -y git rsync \
     && microdnf clean all
 
 ENV NODE_VERSION=v20.18.0
-ENV NODE_DISTRO=linux-x64
 ENV NODE_BASE_URL=https://nodejs.org/dist/${NODE_VERSION}
 
-RUN curl -fsSL ${NODE_BASE_URL}/node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz -o node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz \
-  && mkdir -p /usr/local/lib/nodejs \
-  && tar -xzf node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz -C /usr/local/lib/nodejs \
-  && rm node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz
+# Determine Node.js architecture based on platform
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        NODE_DISTRO="linux-x64"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        NODE_DISTRO="linux-arm64"; \
+    else \
+        echo "Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    curl -fsSL ${NODE_BASE_URL}/node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz -o node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz && \
+    mkdir -p /usr/local/lib/nodejs && \
+    tar -xzf node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz -C /usr/local/lib/nodejs && \
+    rm node-${NODE_VERSION}-${NODE_DISTRO}.tar.gz && \
+    mv /usr/local/lib/nodejs/node-${NODE_VERSION}-${NODE_DISTRO} /usr/local/lib/nodejs/node
 
-ENV PATH=/usr/local/lib/nodejs/node-${NODE_VERSION}-${NODE_DISTRO}/bin/:$PATH
+ENV PATH=/usr/local/lib/nodejs/node/bin/:$PATH
 
 RUN npm install yarn synp -g
 
