@@ -3,4 +3,4 @@
 set -e
 set -u
 
-${PWD}/scripts/container_tool.sh build -f Dockerfile -t quay.io/che-incubator/dash-licenses:local .
+${PWD}/scripts/container_tool.sh build . -f Dockerfile -t quay.io/che-incubator/dash-licenses:local
