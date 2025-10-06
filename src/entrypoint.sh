@@ -1,4 +1,15 @@
 #!/bin/bash
+#
+# Copyright (c) 2020-2025 Red Hat, Inc.
+# This program and the accompanying materials are made
+# available under the terms of the Eclipse Public License 2.0
+# which is available at https://www.eclipse.org/legal/epl-2.0/
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+# Contributors:
+#   Red Hat, Inc. - initial API and implementation
+#
 
 usage() {
     bold=$(tput bold)
@@ -50,12 +61,10 @@ fi
 if [ ! -f $PROJECT_DIR/yarn.lock ] && [ ! -f $PROJECT_DIR/package-lock.json ] && [ ! -f $PROJECT_DIR/pom.xml ]; then
     if [ -f $PROJECT_DIR/package.json ]; then
         echo "Error: Can't find lock file. Generate and commit the lock file and then try again."
-        ls -la $PROJECT_DIR
-        exit $EXIT_CODE
+        exit 1
     fi
     echo "Error: Can't find any package manager file."
-    ls -la $PROJECT_DIR
-    exit $EXIT_CODE
+    exit 1
 fi
 
 if [ ! -d $DEPS_DIR ]; then

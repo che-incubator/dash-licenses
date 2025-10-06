@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2024 Red Hat, Inc.
+ * Copyright (c) 2020-2025 Red Hat, Inc.
  * This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License 2.0
  * which is available at https://www.eclipse.org/legal/epl-2.0/
@@ -10,16 +10,16 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-const { existsSync, readFileSync } = require('fs');
+import { existsSync, readFileSync } from 'fs';
 
-const [YARN_DEPS_INFO] = process.argv.slice(2);
+const [YARN_DEPS_INFO]: string[] = process.argv.slice(2);
 
-(function () {
+(function (): void {
   if (existsSync(YARN_DEPS_INFO)) {
     // get all dependencies info
-    const allDependencies = readFileSync(YARN_DEPS_INFO).toString();
+    const allDependencies: string = readFileSync(YARN_DEPS_INFO).toString();
     if (allDependencies.length > 0) {
-      const licenses = allDependencies
+      const licenses: string = allDependencies
           .replace(/"/g, '')
           .replace(/.+[^(@npm)]:.+/g, '')
           .replace(/@npm:/g, '@')
@@ -28,4 +28,3 @@ const [YARN_DEPS_INFO] = process.argv.slice(2);
     }
   }
 }());
-

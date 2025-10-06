@@ -49,9 +49,43 @@ RUN curl -fsSL ${DASH_LICENSE_URL} -o dash-licenses-${DASH_LICENSE_REV}.tar.gz \
   && mv /workspace/dash-licenses-${DASH_LICENSE_REV}/shaded/target/org.eclipse.dash.licenses-${DASH_LICENSE_REV}.jar /workspace/dash-licenses.jar \
   && rm /workspace/dash-licenses-${DASH_LICENSE_REV} -rf
 
-COPY ${PWD}/src/package-manager package-manager
-COPY ${PWD}/src/entrypoint.sh entrypoint.sh
-COPY ${PWD}/src/document.js document.js
+# Copy source files and build configuration
+COPY ${PWD}/package*.json ./
+COPY ${PWD}/tsconfig.json ./
+COPY ${PWD}/src/ ./src/
+
+# Install dependencies and build TypeScript
+RUN npm ci --only=production && npm install typescript --no-save && npm run build
+
+# Copy files from src to workspace root for backward compatibility
+RUN cp -r ./src/package-manager /workspace/package-manager && \
+    cp ./src/entrypoint.sh /workspace/entrypoint.sh
+
+# Copy compiled TypeScript files to their expected locations for backward compatibility
+RUN if [ -f ./dist/src/document.js ]; then \
+        cp ./dist/src/document.js /workspace/document.js; \
+    elif [ -f ./dist/document.js ]; then \
+        cp ./dist/document.js /workspace/document.js; \
+    fi && \
+    if [ -d ./dist/src/package-manager ]; then \
+        find ./dist/src/package-manager -name "*.js" -type f | while read file; do \
+            relative_path=$(echo "$file" | sed 's|./dist/src/||'); \
+            target_dir=$(dirname "/workspace/$relative_path"); \
+            mkdir -p "$target_dir"; \
+            cp "$file" "/workspace/$relative_path"; \
+        done; \
+    elif [ -d ./dist/package-manager ]; then \
+        find ./dist/package-manager -name "*.js" -type f | while read file; do \
+            relative_path=$(echo "$file" | sed 's|./dist/||'); \
+            target_dir=$(dirname "/workspace/$relative_path"); \
+            mkdir -p "$target_dir"; \
+            cp "$file" "/workspace/$relative_path"; \
+        done; \
+    fi
+
+# Keep the dist directory for reference (copy all compiled files)
+RUN mkdir -p /workspace/dist && \
+    cp -r ./dist/* /workspace/dist/ 2>/dev/null || true
 
 RUN useradd -u 10001 -G wheel,root -d /home/user --shell /bin/bash -m user \
     && chgrp -R 0 /home \
