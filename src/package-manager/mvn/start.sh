@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Default batch size, can be overridden by environment variable set in entrypoint.sh
+BATCH_SIZE=${BATCH_SIZE:-500}
+
 build_info_msg() {
     cat <<EOM
 docker run \\
@@ -33,8 +36,8 @@ mvn dependency:list | grep -Poh "\S+:(test)" | sort | uniq > $TMP_DIR/mvn-dev-de
 echo "Done."
 echo
 
-echo "Generating a temporary PROD_DEPENDENCIES file..."
-cat $TMP_DIR/mvn-prod-deps.txt | java -jar $DASH_LICENSES -batch 500 -summary $TMP_DIR/PROD_DEPENDENCIES - > /dev/null
+echo "Generating a temporary DEPENDENCIES file (batch size: $BATCH_SIZE)..."
+cat $TMP_DIR/mvn-prod-deps.txt | java -jar $DASH_LICENSES -batch "$BATCH_SIZE" -summary $TMP_DIR/PROD_DEPENDENCIES - > /dev/null
 echo "Done."
 echo
 
