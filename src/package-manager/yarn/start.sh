@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Default batch size, can be overridden by environment variable set in entrypoint.sh
+BATCH_SIZE=${BATCH_SIZE:-500}
+
 build_info_msg() {
     cat <<EOM
 docker run \\
@@ -33,8 +36,8 @@ yarn licenses list --ignore-engines --json --depth=0 --no-progres --network-time
 echo "Done."
 echo
 
-echo "Generating a temporary DEPENDENCIES file..."
-node $WORKSPACE_DIR/package-manager/yarn/parser.js | java -jar $DASH_LICENSES -batch 500 -summary "$TMP_DIR/DEPENDENCIES" - > /dev/null
+echo "Generating a temporary DEPENDENCIES file (batch size: $BATCH_SIZE)..."
+node $WORKSPACE_DIR/package-manager/yarn/parser.js | java -jar $DASH_LICENSES -batch "$BATCH_SIZE" -summary "$TMP_DIR/DEPENDENCIES" - > /dev/null
 echo "Done."
 echo
 

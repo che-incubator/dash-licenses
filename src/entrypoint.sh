@@ -11,28 +11,62 @@ ${bold}Arguments:${normal}
         (Re)generate dependencies info and check if all of dependencies are approved to use.
     ${bold}--check${normal}
         Check if dependencies info is present and up-to-date, and all of dependencies are approved to use.
+    ${bold}--batch${normal} <number>
+        Set the batch size for license processing (default: 500).
+    ${bold}--debug${normal}
+        Copy TMP directory for inspection.
     ${bold}--help${normal}
         Print this message.
 EOM
     exit 0
 }
 
-if [ "$1" = "--help" ]; then
-    usage
-fi
-if [ "$1" != "--help" ] && [ "$1" != "--check" ] && [ "$1" != "--generate" ] && [ "$1" != "--debug" ]; then
-    echo "Error: unknown argument \"$1\" for \"$0\""
-    echo "Run with argument \"--help\" for usage."
-    exit 0
-fi
+# --- Parse arguments ---
+
+BATCH_SIZE=500
+ACTION="--generate"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help)
+            usage
+            ;;
+        --check)
+            ACTION="--check"
+            shift
+            ;;
+        --generate)
+            ACTION="--generate"
+            shift
+            ;;
+        --debug)
+            DEBUG="--debug"
+            shift
+            ;;
+        --batch)
+            if [ -n "$2" ] && [[ "$2" =~ ^[0-9]+$ ]]; then
+                BATCH_SIZE="$2"
+                shift 2
+            else
+                echo "Error: --batch requires a numeric value"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Error: unknown argument \"$1\" for \"$0\""
+            echo "Run with argument \"--help\" for usage."
+            exit 0
+            ;;
+    esac
+done
 
 EXIT_CODE=0
-if [ "$1" = "--check" ]; then
+if [ "$ACTION" = "--check" ]; then
     EXIT_CODE=1
 fi
 
 export ENCODING=utf8
-
+export BATCH_SIZE
 export WORKSPACE_DIR=/workspace
 export PROJECT_DIR=$WORKSPACE_DIR/project
 export DEPS_DIR=$PROJECT_DIR/.deps
@@ -41,8 +75,16 @@ export DEPS_COPY_DIR=$PROJECT_COPY_DIR/.deps
 export TMP_DIR=$DEPS_COPY_DIR/tmp
 export DASH_LICENSES=$WORKSPACE_DIR/dash-licenses.jar
 
+echo
+echo "-------------------------------------------"
+echo "Configuration:"
+echo "  ACTION:       $ACTION"
+echo "  DEBUG:        ${DEBUG:-<none>}"
+echo "  BATCH_SIZE:   $BATCH_SIZE"
+echo "-------------------------------------------"
+echo
+
 if [ ! -d $PROJECT_DIR ]; then
-    echo
     echo "Error: The project directory is not mounted."
     exit $EXIT_CODE
 fi
@@ -86,26 +128,26 @@ fi
 cd $PROJECT_COPY_DIR
 
 if [ -f $PROJECT_COPY_DIR/pom.xml ]; then
-    $WORKSPACE_DIR/package-manager/mvn/start.sh $1
+    $WORKSPACE_DIR/package-manager/mvn/start.sh $ACTION $DEBUG
     exit $?
 fi
 
 if [ -f $PROJECT_COPY_DIR/package.json ]; then
-  if [ -f $PROJECT_COPY_DIR/package-lock.json ]; then
-      $WORKSPACE_DIR/package-manager/npm/start.sh $1
-      exit $?
-  fi
+    if [ -f $PROJECT_COPY_DIR/package-lock.json ]; then
+        $WORKSPACE_DIR/package-manager/npm/start.sh $ACTION $DEBUG
+        exit $?
+    fi
 
-  if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
-      if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -lt 2 ]; then
-          $WORKSPACE_DIR/package-manager/yarn/start.sh $1
-          exit $?
-      fi
-      if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -le 4 ]; then
-          $WORKSPACE_DIR/package-manager/yarn3/start.sh $1
-          exit $?
-      fi
-  fi
+    if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
+        if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -lt 2 ]; then
+            $WORKSPACE_DIR/package-manager/yarn/start.sh $ACTION $DEBUG
+            exit $?
+        fi
+        if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -le 4 ]; then
+            $WORKSPACE_DIR/package-manager/yarn3/start.sh $ACTION $DEBUG
+            exit $?
+        fi
+    fi
 fi
 
 echo "Error: Can't find any supported package manager file."
