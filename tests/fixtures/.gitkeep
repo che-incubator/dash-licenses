@@ -1,0 +1,10 @@
+# Test fixtures directory
+# 
+# This directory should contain test fixture files generated using --debug flag
+# 
+# Example structure:
+# - npm-sample/
+# - yarn-sample/
+# - yarn3-sample/
+# - mvn-sample/
+
