@@ -1,55 +1,301 @@
 # Container wrapper for Eclipse Dash License Tool
 
-This is a container wrapper for [The Eclipse Dash License Tool](https://github.com/eclipse/dash-licenses) that allows easily to generate dependencies files with container image without the need to compile `dash-licenses` jar.
-It supports the following package managers:
- - [mvn](https://maven.apache.org)
- - [npm](https://docs.npmjs.com)
- - [yarn](https://yarnpkg.com)
+This is a container wrapper for [The Eclipse Dash License Tool](https://github.com/eclipse/dash-licenses) that allows you to easily generate dependencies files with a container image without the need to compile the `dash-licenses` jar.
+
+## Features
+
+- **Multi-package manager support**: Works with Maven, npm, Yarn (v1), and Yarn 3+
+- **TypeScript-based**: Fully written in TypeScript with type safety
+- **Comprehensive logging**: Structured logging for better debugging
+- **Debug mode**: Copy all temporary files for inspection
+- **License header enforcement**: Automated license header checking and fixing
+- **CI/CD ready**: Designed for integration into build pipelines
+
+## Supported Package Managers
+
+- [Maven](https://maven.apache.org) (`pom.xml`)
+- [npm](https://docs.npmjs.com) (`package-lock.json`)
+- [Yarn v1](https://classic.yarnpkg.com) (`yarn.lock` with Yarn < 2)
+- [Yarn 3+](https://yarnpkg.com) (`yarn.lock` with Yarn >= 3)
 
 ## Requirements
 
-- Docker
+- Docker or Podman
+- Node.js >= 20.0.0 (for local development)
 
-## Build
+## Quick Start
 
-```sh
-scripts/build.sh
-```
+### Generate Dependency Information
 
-## Usage
-
-### Update dependency info
-
-The following command generates dependencies info of a project and then checks all found dependencies. It returns a non-zero exit code if any of them are restricted to use.
-```sh
-docker run --rm -t \
-       -v ${PWD}/:/workspace/project  \
-       quay.io/che-incubator/dash-licenses:next
-```
-As the result this command creates next files:
-- `prod.md` with the list of production dependencies;
-- `dev.md` which contains only build and test dependencies;
-- `problems.md` will be created if some dependencies are not covered with CQ, unnecessary excludes present, etc.
-
-### Check dependencies
-
-If you just need to verify that all dependencies satisfy IP requirements, use the `--check` flag, like the following
-```sh
-docker run --rm -t \
-       -v ${PWD}/:/workspace/project  \
-       quay.io/che-incubator/dash-licenses:next --check
-```
-
-So, this command doesn't create any new files in the project directory (except a temporary one) but checks if the dependencies info is up-to-date and then validates all found dependencies. It returns a non-zero exit code if any of the dependencies are restricted to use.
-
-### Debug
-
-If you need all the generated files including logs and intermediate, use `--debug` flag:
+Generate dependency information for your project:
 
 ```sh
 docker run --rm -t \
-       -v ${PWD}/:/workspace/project  \
-       quay.io/che-incubator/dash-licenses:next --debug
+  -v ${PWD}:/workspace/project \
+  quay.io/che-incubator/dash-licenses:next --batch 200
 ```
 
-This command copies all files from the temporary directory. It returns a non-zero exit code if any of the dependencies are restricted to use.
+This command creates the following files in `.deps/`:
+- `prod.md` - List of production dependencies
+- `dev.md` - List of development and test dependencies
+- `problems.md` - Issues found (missing CQs, etc.)
+
+Using `--batch 200` makes the tool more stable by reducing API load and avoiding timeouts.
+
+### Check Dependencies
+
+Verify that all dependencies satisfy IP requirements without generating new files:
+
+```sh
+docker run --rm -t \
+  -v ${PWD}:/workspace/project \
+  quay.io/che-incubator/dash-licenses:next --check --batch 200
+```
+
+### Debug Mode
+
+Get all generated files including logs and intermediate files:
+
+```sh
+docker run --rm -t \
+  -v ${PWD}:/workspace/project \
+  quay.io/che-incubator/dash-licenses:next --debug --batch 200
+```
+
+This copies all temporary files to `.deps/tmp/` for inspection.
+
+### Batch Size
+
+Control the batch size for license processing (default: 500, recommended: 200):
+
+```sh
+# Using command-line argument (recommended)
+docker run --rm -t \
+  -v ${PWD}:/workspace/project \
+  quay.io/che-incubator/dash-licenses:next --batch 200
+
+# Or using environment variable
+docker run --rm -t \
+  -v ${PWD}:/workspace/project \
+  -e BATCH_SIZE=200 \
+  quay.io/che-incubator/dash-licenses:next
+```
+
+Lower batch sizes (like 200) are more stable and less likely to hit API rate limits or timeouts.
+
+## Project Structure
+
+```
+dash-licenses/
+├── .config/              # Configuration files
+│   └── copyright.js      # License header template
+├── build/               # Build and Docker files
+│   ├── create-image.sh  # Container image build script
+│   ├── dockerfiles/     # Dockerfiles and entrypoint
+│   │   ├── Dockerfile   # Main Dockerfile
+│   │   └── entrypoint.sh # Container entrypoint
+│   └── scripts/         # Additional build utilities
+├── src/                  # TypeScript source code
+│   ├── document.ts      # Document generation logic
+│   ├── helpers/         # Shared utilities
+│   │   └── utils.ts     # Common helper functions
+│   └── package-managers/ # Package manager implementations
+│       ├── mvn/         # Maven support
+│       │   ├── index.ts # Main Maven processor
+│       │   └── bump-deps.ts
+│       ├── npm/         # npm support
+│       │   ├── index.ts # Main npm processor
+│       │   ├── parser.ts
+│       │   └── bump-deps.ts
+│       ├── yarn/        # Yarn v1 support
+│       │   ├── index.ts # Main Yarn processor
+│       │   ├── parser.ts
+│       │   └── bump-deps.ts
+│       └── yarn3/       # Yarn 3+ support
+│           ├── index.ts # Main Yarn 3 processor
+│           ├── parser.ts
+│           └── bump-deps.ts
+├── tests/               # Test suite
+│   ├── e2e/            # End-to-end tests
+│   ├── integration/     # Integration tests
+│   └── unit/            # Unit tests
+└── scripts/             # Build and utility scripts
+    └── container_tool.sh # Container wrapper script
+```
+
+## Development
+
+### Prerequisites
+
+- Node.js >= 20.0.0
+- npm or yarn
+- Docker or Podman (for testing container)
+
+### Setup
+
+```sh
+# Install dependencies
+npm install
+
+# Build TypeScript
+npm run build
+
+# Run tests
+npm test
+```
+
+### Available Scripts
+
+#### Build
+
+- `npm run build` - Compile TypeScript to JavaScript (auto-cleans first)
+- `npm run clean` - Remove build artifacts
+- `npm run build:watch` - Watch mode for development
+- `npm run type-check` - Type check without compilation
+
+#### Testing
+
+- `npm test` - Run all tests
+- `npm run test:watch` - Watch mode for tests
+- `npm run test:coverage` - Generate coverage report
+- `npm run test:unit` - Run unit tests only
+- `npm run test:integration` - Run integration tests only
+
+#### Code Quality
+
+- `npm run lint` - Run ESLint
+- `npm run lint:fix` - Fix ESLint issues automatically
+- `npm run format:check` - Check code formatting with Prettier
+- `npm run format:fix` - Fix code formatting automatically
+
+#### License Headers
+
+- `npm run header:check` - Check license headers in all files
+- `npm run header:check:verbose` - Check with verbose output
+- `npm run header:fix` - Automatically add missing license headers
+
+### Building the Container
+
+```sh
+# Build using the build script
+./build/create-image.sh
+
+# Or build manually
+docker build -f build/dockerfiles/Dockerfile -t quay.io/che-incubator/dash-licenses:next .
+```
+
+### Local Testing
+
+Test the container locally:
+
+```sh
+# Using the container tool script (supports Docker/Podman)
+./scripts/container_tool.sh run --rm -t \
+  -v ${PWD}:/workspace/project \
+  quay.io/che-incubator/dash-licenses:next --debug --batch 200
+```
+
+## Configuration
+
+### License Headers
+
+License headers are enforced using `header-check.js`. The license template is defined in `.config/copyright.js`.
+
+To check headers:
+```sh
+npm run header:check
+```
+
+To fix missing headers:
+```sh
+npm run header:fix
+```
+
+### Code Formatting
+
+Code formatting is enforced using Prettier. Configuration is in `.prettierrc`.
+
+### Linting
+
+ESLint configuration is in `.eslintrc.js`. It includes:
+- TypeScript support
+- Prettier integration
+- License header checking (via `header-check.js`)
+
+## How It Works
+
+1. **Project Detection**: The tool detects the package manager by checking for:
+   - `pom.xml` → Maven
+   - `package-lock.json` → npm
+   - `yarn.lock` → Yarn (version determined automatically)
+
+2. **Dependency Extraction**: The appropriate parser extracts dependency information:
+   - Maven: Uses `mvn dependency:list`
+   - npm: Parses `package-lock.json`
+   - Yarn: Uses `yarn licenses list` or `yarn info`
+
+3. **License Analysis**: Dependencies are sent to Eclipse Dash License Tool in batches to:
+   - Identify licenses
+   - Check for CQ (Contribution Questionnaire) status
+   - Detect restricted licenses
+
+4. **Document Generation**: Creates markdown files:
+   - `prod.md`: Production dependencies with license info
+   - `dev.md`: Development dependencies with license info
+   - `problems.md`: Issues requiring attention
+
+5. **Exclusion Handling**: Manual exclusions can be added in `.deps/EXCLUDED/`:
+   - `prod.md`: Production dependencies that don't need CQs
+   - `dev.md`: Development dependencies that don't need CQs
+
+## Troubleshooting
+
+### Permission Denied Errors
+
+If you encounter permission errors when creating `.deps/` directory, ensure the mounted volume has proper permissions. The container will attempt to create the directory structure automatically.
+
+### Empty DEPENDENCIES File
+
+If the `DEPENDENCIES` file is empty:
+- Check your internet connection (Eclipse Foundation API access required)
+- Verify the batch size isn't too large
+- Use `--debug` flag to inspect intermediate files
+
+### Yarn 3 Issues
+
+For Yarn 3 projects:
+- Ensure Yarn 3 is properly configured
+- The tool will automatically install the licenses plugin if needed
+- Check `.deps/tmp/yarn-deps-info.json` in debug mode
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Ensure all tests pass: `npm test`
+5. Check code quality: `npm run lint && npm run format:check`
+6. Check license headers: `npm run header:check`
+7. Submit a pull request
+
+### Code Style
+
+- Follow TypeScript best practices
+- Use the provided ESLint and Prettier configurations
+- Ensure all files have proper license headers
+- Write tests for new features
+
+## License
+
+This project is licensed under the Eclipse Public License 2.0 (EPL-2.0).
+
+## Related Projects
+
+- [Eclipse Dash License Tool](https://github.com/eclipse/dash-licenses) - The underlying license analysis tool
+- [Eclipse Che](https://github.com/eclipse-che) - Uses this tool for dependency management
+
+## Support
+
+For issues and questions:
+- GitHub Issues: https://github.com/che-incubator/dash-licenses/issues
+- Eclipse Che Community: https://github.com/eclipse-che/che
