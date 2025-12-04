@@ -10,7 +10,7 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-import { parseDependenciesFile, DependencyMap, LicenseMap } from '../../src/document';
+import { parseDependenciesFile, DependencyMap, LicenseMap } from '../index';
 
 describe('Scoped Packages Parsing', () => {
   describe('DEPENDENCIES file format parsing', () => {
