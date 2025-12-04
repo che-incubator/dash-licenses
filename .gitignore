@@ -1,7 +1,56 @@
-.theia/
-.idea/
-
+# Dependencies
 node_modules/
-yarn-error.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
+# Test coverage
+coverage/
+*.lcov
+
+# Test artifacts
+tests/integration/temp-test-env/
+tests/e2e/test-project/.deps/
+
+# Runtime files
+.deps/
+.tmp/
+tmp/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Build artifacts
+dist/
+!build/dockerfiles/
+!build/dockerfiles/**
+!build/build.sh
 build/
+*.tsbuildinfo
+
+# TypeScript compiled outputs
+*.d.ts.map
+
+# Generated JavaScript files (compiled from TypeScript)
+# All compiled outputs go to dist/ directory which is already ignored above
+
+# Test files that shouldn't be compiled/tracked
+tests/unit/yarn-parser.test.js
+tests/unit/yarn3-parser.test.js
+tests/unit/yarn-bump-deps.test.js
+tests/unit/yarn3-bump-deps.test.js
+tests/unit/yarn-integration.test.js
+
+# License header is managed by header-check.js and .config/copyright.js
