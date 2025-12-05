@@ -10,8 +10,8 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-import { PackageManagerUtils, type FilePaths } from '../../src/helpers/utils';
-import type { DependencyMap } from '../../src/document';
+import { PackageManagerUtils, type FilePaths } from '../utils';
+import type { DependencyMap } from '../../document';
 
 describe('PackageManagerUtils Integration Tests', () => {
   describe('getFilePaths', () => {

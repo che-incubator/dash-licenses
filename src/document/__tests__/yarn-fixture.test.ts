@@ -16,10 +16,10 @@ import {
   DependencyParser,
   type DependencyMap,
   type LicenseMap
-} from '../../src/document';
+} from '../index';
 
 describe('Yarn Package Manager - Real Fixture Data', () => {
-  const fixturesDir = path.join(__dirname, '../fixtures/yarn-sample');
+  const fixturesDir = path.join(__dirname, '../../../tests/fixtures/yarn-sample');
 
   test('should correctly parse DEPENDENCIES file', () => {
     const dependenciesFile = readFileSync(path.join(fixturesDir, 'DEPENDENCIES'), 'utf8');

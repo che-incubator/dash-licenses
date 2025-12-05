@@ -19,10 +19,10 @@ import {
   type DependencyMap,
   type LicenseMap,
   type LicenseInfo
-} from '../../src/document';
+} from '../index';
 
 describe('Yarn Real Data Integration Tests', () => {
-  const fixturesDir = path.join(__dirname, '../fixtures/yarn-sample');
+  const fixturesDir = path.join(__dirname, '../../../tests/fixtures/yarn-sample');
 
   describe('Parse real che-dashboard DEPENDENCIES file', () => {
     test('should correctly parse approved dependencies from DEPENDENCIES file', () => {
