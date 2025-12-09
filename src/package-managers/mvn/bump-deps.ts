@@ -27,12 +27,10 @@ import {
  */
 class MavenDependencyProcessor {
   private readonly paths: FilePaths;
-  private readonly writeToDisk: boolean;
   private readonly allDependencies: LicenseMap;
   
   constructor() {
     this.paths = PackageManagerUtils.getFilePaths();
-    this.writeToDisk = PackageManagerUtils.shouldWriteToDisk();
     this.allDependencies = new Map();
     
     // Validate environment
@@ -226,27 +224,24 @@ class MavenDependencyProcessor {
     }
 
     // Generate production dependencies document
+    // Always write to TMP_DIR for comparison (entrypoint.sh handles copying to final destination)
     const prodDepsData = arrayToDocument('Production dependencies', prodDeps, depsToCQ, this.allDependencies);
-    if (this.writeToDisk) {
-      writeFileSync(this.paths.PROD_MD, prodDepsData, { encoding: this.paths.ENCODING as BufferEncoding });
-      console.log(`Generated ${this.paths.PROD_MD} (${prodDeps.length} dependencies)`);
-    }
+    writeFileSync(this.paths.PROD_MD, prodDepsData, { encoding: this.paths.ENCODING as BufferEncoding });
+    console.log(`Generated ${this.paths.PROD_MD} (${prodDeps.length} dependencies)`);
 
     // Generate development dependencies document
+    // Always write to TMP_DIR for comparison (entrypoint.sh handles copying to final destination)
     const devDepsData = arrayToDocument('Development dependencies', devDeps, depsToCQ, this.allDependencies);
-    if (this.writeToDisk) {
-      writeFileSync(this.paths.DEV_MD, devDepsData, { encoding: this.paths.ENCODING as BufferEncoding });
-      console.log(`Generated ${this.paths.DEV_MD} (${devDeps.length} dependencies)`);
-    }
+    writeFileSync(this.paths.DEV_MD, devDepsData, { encoding: this.paths.ENCODING as BufferEncoding });
+    console.log(`Generated ${this.paths.DEV_MD} (${devDeps.length} dependencies)`);
 
     // Handle logs and problems
+    // Always write to TMP_DIR (entrypoint.sh handles copying to final destination)
     const logs = getLogs();
     if (logs) {
-      if (this.writeToDisk) {
-        writeFileSync(this.paths.PROBLEMS_MD, `# Dependency analysis\n${logs}`, { encoding: this.paths.ENCODING as BufferEncoding });
-      }
+      writeFileSync(this.paths.PROBLEMS_MD, `# Dependency analysis\n${logs}`, { encoding: this.paths.ENCODING as BufferEncoding });
       console.log(logs);
-    } else if (this.writeToDisk && existsSync(this.paths.PROBLEMS_MD)) {
+    } else if (existsSync(this.paths.PROBLEMS_MD)) {
       unlinkSync(this.paths.PROBLEMS_MD);
       console.log('All checks passed. Removed old problems.md file.');
     }

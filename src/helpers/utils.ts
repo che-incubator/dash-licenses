@@ -70,9 +70,11 @@ export class PackageManagerUtils {
       DEPS_DIR,
       TMP_DIR,
       EXCLUSIONS_DIR,
-      PROD_MD: path.join(DEPS_DIR, 'prod.md'),
-      DEV_MD: path.join(DEPS_DIR, 'dev.md'),
-      PROBLEMS_MD: path.join(DEPS_DIR, 'problems.md'),
+      // Write generated files to TMP_DIR so they can be compared in --check mode
+      // and then copied to final destination by entrypoint.sh in generate mode
+      PROD_MD: path.join(TMP_DIR, 'prod.md'),
+      DEV_MD: path.join(TMP_DIR, 'dev.md'),
+      PROBLEMS_MD: path.join(TMP_DIR, 'problems.md'),
       DEPENDENCIES: path.join(TMP_DIR, 'DEPENDENCIES'),
       EXCLUDED_PROD_MD: path.join(EXCLUSIONS_DIR, 'prod.md'),
       EXCLUDED_DEV_MD: path.join(EXCLUSIONS_DIR, 'dev.md')
@@ -112,18 +114,18 @@ export class PackageManagerUtils {
 
   /**
    * Process dependencies file and generate documents
+   * Files are always written to TMP_DIR for comparison in --check mode.
+   * In generate mode, entrypoint.sh handles copying files to the final destination.
    * @param prodDeps - Array of production dependencies
    * @param devDeps - Array of development dependencies
    * @param allDependencies - Map of all dependency information
    * @param paths - File paths object
-   * @param writeToDisk - Whether to write files to disk
    */
   public static processAndGenerateDocuments(
     prodDeps: string[],
     devDeps: string[],
     allDependencies: LicenseMap,
-    paths: FilePaths,
-    writeToDisk: boolean
+    paths: FilePaths
   ): void {
     try {
       const depsToCQ: DependencyMap = new Map();
@@ -140,9 +142,7 @@ export class PackageManagerUtils {
       if (!existsSync(paths.DEPENDENCIES)) {
         const errorMsg = `Error: DEPENDENCIES file not found at ${paths.DEPENDENCIES}`;
         console.error(errorMsg);
-        if (writeToDisk) {
-          writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
-        }
+        writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
         process.exit(1);
       }
 
@@ -150,55 +150,46 @@ export class PackageManagerUtils {
       if (!dependenciesStr || dependenciesStr.trim().length === 0) {
         const errorMsg = `Error: DEPENDENCIES file is empty at ${paths.DEPENDENCIES}`;
         console.error(errorMsg);
-        if (writeToDisk) {
-          writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
-        }
+        writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
         process.exit(1);
       }
 
       parseDependenciesFile(dependenciesStr, depsToCQ, allDependencies);
 
       // Generate production dependencies document
+      // Always write to TMP_DIR for comparison (entrypoint.sh handles copying to final destination)
       const prodDepsData = arrayToDocument('Production dependencies', prodDeps, depsToCQ, allDependencies);
-      if (writeToDisk) {
-        try {
-          writeFileSync(paths.PROD_MD, prodDepsData, { encoding: paths.ENCODING as BufferEncoding });
-          console.log(`Generated ${paths.PROD_MD} (${prodDeps.length} dependencies)`);
-        } catch (error) {
-          const errorMsg = `Error writing prod.md to ${paths.PROD_MD}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          console.error(errorMsg);
-          if (writeToDisk) {
-            writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
-          }
-          process.exit(1);
-        }
+      try {
+        writeFileSync(paths.PROD_MD, prodDepsData, { encoding: paths.ENCODING as BufferEncoding });
+        console.log(`Generated ${paths.PROD_MD} (${prodDeps.length} dependencies)`);
+      } catch (error) {
+        const errorMsg = `Error writing prod.md to ${paths.PROD_MD}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error(errorMsg);
+        writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
+        process.exit(1);
       }
 
       // Generate development dependencies document
+      // Always write to TMP_DIR for comparison (entrypoint.sh handles copying to final destination)
       const devDepsData = arrayToDocument('Development dependencies', devDeps, depsToCQ, allDependencies);
-      if (writeToDisk) {
-        try {
-          writeFileSync(paths.DEV_MD, devDepsData, { encoding: paths.ENCODING as BufferEncoding });
-          console.log(`Generated ${paths.DEV_MD} (${devDeps.length} dependencies)`);
-        } catch (error) {
-          const errorMsg = `Error writing dev.md to ${paths.DEV_MD}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          console.error(errorMsg);
-          if (writeToDisk) {
-            writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
-          }
-          process.exit(1);
-        }
+      try {
+        writeFileSync(paths.DEV_MD, devDepsData, { encoding: paths.ENCODING as BufferEncoding });
+        console.log(`Generated ${paths.DEV_MD} (${devDeps.length} dependencies)`);
+      } catch (error) {
+        const errorMsg = `Error writing dev.md to ${paths.DEV_MD}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error(errorMsg);
+        writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
+        process.exit(1);
       }
 
       // Handle logs and problems
+      // Always write to TMP_DIR (entrypoint.sh handles copying to final destination)
       const logs = getLogs();
       if (logs) {
-        if (writeToDisk) {
-          writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n${logs}`, { encoding: paths.ENCODING as BufferEncoding });
-        }
+        writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n${logs}`, { encoding: paths.ENCODING as BufferEncoding });
         console.log(logs);
-      } else if (writeToDisk && existsSync(paths.PROBLEMS_MD)) {
-        // Delete old problems.md if all checks passed and no issues found
+      } else if (existsSync(paths.PROBLEMS_MD)) {
+        // Delete old problems.md in TMP_DIR if all checks passed and no issues found
         unlinkSync(paths.PROBLEMS_MD);
         console.log('All checks passed. Removed old problems.md file.');
       }
@@ -216,12 +207,10 @@ export class PackageManagerUtils {
       if (error instanceof Error && error.stack) {
         console.error(error.stack);
       }
-      if (writeToDisk) {
-        try {
-          writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n${error instanceof Error && error.stack ? error.stack : ''}\n`, { encoding: paths.ENCODING as BufferEncoding });
-        } catch {
-          // Ignore errors writing problems.md if we're already in error state
-        }
+      try {
+        writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n${error instanceof Error && error.stack ? error.stack : ''}\n`, { encoding: paths.ENCODING as BufferEncoding });
+      } catch {
+        // Ignore errors writing problems.md if we're already in error state
       }
       process.exit(1);
     }

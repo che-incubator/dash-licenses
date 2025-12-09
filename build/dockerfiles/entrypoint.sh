@@ -232,6 +232,13 @@ if [ $PROCESSOR_EXIT_CODE -ne 0 ]; then
     exit $PROCESSOR_EXIT_CODE
 fi
 
+# Skip copying results in check mode - check mode should not write anything
+if [ "$ACTION" = "--check" ]; then
+    echo
+    echo "Check completed successfully."
+    exit 0
+fi
+
 # Copy results back to the original project directory
 echo
 echo "Copying results to project directory..."
@@ -244,10 +251,10 @@ if ! mkdir -p "$DEPS_DIR" 2>/dev/null; then
     exit 1
 fi
 
-# Copy result files
+# Copy result files from tmp directory (where they are generated)
 for file in prod.md dev.md problems.md; do
-    if [ -f "$DEPS_COPY_DIR/$file" ]; then
-        if ! cp "$DEPS_COPY_DIR/$file" "$DEPS_DIR/$file" 2>/dev/null; then
+    if [ -f "$TMP_DIR/$file" ]; then
+        if ! cp "$TMP_DIR/$file" "$DEPS_DIR/$file" 2>/dev/null; then
             print_permission_error
             exit 1
         fi
@@ -265,7 +272,7 @@ fi
 if [ -n "$DEBUG" ]; then
     echo "  Copying tmp directory (debug mode)..."
     mkdir -p "$DEPS_DIR/tmp" 2>/dev/null || true
-    cp -r "$DEPS_COPY_DIR/tmp/"* "$DEPS_DIR/tmp/" 2>/dev/null || echo "  Warning: Could not copy some tmp files"
+    cp -r "$TMP_DIR/"* "$DEPS_DIR/tmp/" 2>/dev/null || echo "  Warning: Could not copy some tmp files"
 fi
 
 echo "Done."

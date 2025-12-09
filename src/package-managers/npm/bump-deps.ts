@@ -28,12 +28,10 @@ interface DependenciesInfo {
  */
 class NpmDependencyProcessor {
   private readonly paths: FilePaths;
-  private readonly writeToDisk: boolean;
   private readonly allDependencies: LicenseMap;
   
   constructor() {
     this.paths = PackageManagerUtils.getFilePaths();
-    this.writeToDisk = PackageManagerUtils.shouldWriteToDisk();
     this.allDependencies = new Map();
     
     // Validate environment
@@ -104,8 +102,7 @@ class NpmDependencyProcessor {
         prodDeps,
         devDeps,
         this.allDependencies,
-        this.paths,
-        this.writeToDisk
+        this.paths
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
