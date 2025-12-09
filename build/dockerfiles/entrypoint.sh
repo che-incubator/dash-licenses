@@ -32,6 +32,32 @@ EOM
     exit 0
 }
 
+# Print permission error message with workarounds
+print_permission_error() {
+    echo
+    echo "=============================================="
+    echo "ERROR: Permission denied writing results"
+    echo "=============================================="
+    echo
+    echo "The container user ($(id -u)) does not have write permission"
+    echo "to the mounted project directory."
+    echo
+    echo "Workarounds:"
+    echo
+    echo "  1. Run with matching user ID:"
+    echo "     podman run --user \$(id -u):\$(id -g) ..."
+    echo "     docker run --user \$(id -u):\$(id -g) ..."
+    echo
+    echo "  2. Pre-create the .deps directory with write permissions:"
+    echo "     mkdir -p .deps && chmod 777 .deps"
+    echo
+    echo "  3. On SELinux systems, add :Z to the volume mount:"
+    echo "     -v \${PWD}:/workspace/project:Z"
+    echo
+    echo "=============================================="
+    echo
+}
+
 # --- Parse arguments ---
 
 BATCH_SIZE=500
@@ -109,84 +135,59 @@ if [ ! -f $PROJECT_DIR/yarn.lock ] && [ ! -f $PROJECT_DIR/package-lock.json ] &&
     exit 1
 fi
 
-# Create .deps directory structure with proper permissions
-if [ ! -d $DEPS_DIR ]; then
-    echo
-    echo "Can't find .deps directory. Create..."
-    mkdir -p $DEPS_DIR
-    chmod 777 $DEPS_DIR 2>/dev/null || true
-    echo "Done."
-    echo
-fi
-
-# Create .deps/tmp directory if it doesn't exist
-if [ ! -d "$DEPS_DIR/tmp" ]; then
-    echo "Create .deps/tmp directory..."
-    mkdir -p "$DEPS_DIR/tmp"
-    chmod 777 "$DEPS_DIR/tmp" 2>/dev/null || true
-    echo "Done."
-    echo
-fi
-
-# Create .deps/EXCLUDED directory if it doesn't exist
-if [ ! -d "$DEPS_DIR/EXCLUDED" ]; then
-    echo "Create .deps/EXCLUDED directory..."
-    mkdir -p "$DEPS_DIR/EXCLUDED"
-    chmod 777 "$DEPS_DIR/EXCLUDED" 2>/dev/null || true
-    echo "Done."
-    echo
-fi
-
-# Create DEPENDENCIES file with proper permissions if it doesn't exist
-# This is optional and may fail if the mounted directory has restricted permissions
-if [ ! -f "$DEPS_DIR/tmp/DEPENDENCIES" ]; then
-    touch "$DEPS_DIR/tmp/DEPENDENCIES" 2>/dev/null || true
-    chmod 666 "$DEPS_DIR/tmp/DEPENDENCIES" 2>/dev/null || true
-fi
-
-# Create default EXCLUDED/dev.md if it doesn't exist
-if [ ! -f "$DEPS_DIR/EXCLUDED/dev.md" ]; then
-    echo "Create default .deps/EXCLUDED/dev.md file..."
-    {
-        cat > "$DEPS_DIR/EXCLUDED/dev.md" << 'EOF'
-This file contains a manual contribution to .deps/dev.md and it's needed because eclipse/dash-licenses does not deal with work-with CQs (more see https://github.com/eclipse/dash-licenses/issues/13)
-
-| Packages | Resolved CQs |
-| --- | --- |
-EOF
-    } 2>/dev/null || echo "Warning: Could not create EXCLUDED/dev.md (permission denied)"
-    chmod 666 "$DEPS_DIR/EXCLUDED/dev.md" 2>/dev/null || true
-    echo "Done."
-    echo
-fi
-
-# Create default EXCLUDED/prod.md if it doesn't exist
-if [ ! -f "$DEPS_DIR/EXCLUDED/prod.md" ]; then
-    echo "Create default .deps/EXCLUDED/prod.md file..."
-    {
-        cat > "$DEPS_DIR/EXCLUDED/prod.md" << 'EOF'
-This file lists dependencies that do not need CQs or auto-detection does not work due to a bug in https://github.com/eclipse/dash-licenses
-
-| Packages | Resolved CQs |
-| --- | --- |
-EOF
-    } 2>/dev/null || echo "Warning: Could not create EXCLUDED/prod.md (permission denied)"
-    chmod 666 "$DEPS_DIR/EXCLUDED/prod.md" 2>/dev/null || true
-    echo "Done."
-    echo
-fi
-
+# Copy project first (including any existing .deps directory)
 echo "Copy project..."
 mkdir -p $PROJECT_COPY_DIR
 rsync -amqP --exclude='node_modules' "$PROJECT_DIR/" $PROJECT_COPY_DIR
 echo "Done."
 echo
 
-if [ ! -d $TMP_DIR ]; then
-    echo "Create tmp dir..."
-    mkdir -p $TMP_DIR
-    chmod 777 $TMP_DIR 2>/dev/null || true
+# Create .deps directory structure in the COPY (container has full permissions here)
+if [ ! -d "$DEPS_COPY_DIR" ]; then
+    echo "Create .deps directory in project copy..."
+    mkdir -p "$DEPS_COPY_DIR"
     echo "Done."
+    echo
+fi
+
+if [ ! -d "$TMP_DIR" ]; then
+    echo "Create tmp dir..."
+    mkdir -p "$TMP_DIR"
+    echo "Done."
+    echo
+fi
+
+if [ ! -d "$DEPS_COPY_DIR/EXCLUDED" ]; then
+    echo "Create EXCLUDED directory..."
+    mkdir -p "$DEPS_COPY_DIR/EXCLUDED"
+    echo "Done."
+    echo
+fi
+
+# Create default EXCLUDED/dev.md if it doesn't exist
+if [ ! -f "$DEPS_COPY_DIR/EXCLUDED/dev.md" ]; then
+    echo "Create default EXCLUDED/dev.md file..."
+    cat > "$DEPS_COPY_DIR/EXCLUDED/dev.md" << 'EOF'
+This file contains a manual contribution to .deps/dev.md and it's needed because eclipse/dash-licenses does not deal with work-with CQs (more see https://github.com/eclipse/dash-licenses/issues/13)
+
+| Packages | Resolved CQs |
+| --- | --- |
+EOF
+    echo "Done."
+    echo
+fi
+
+# Create default EXCLUDED/prod.md if it doesn't exist
+if [ ! -f "$DEPS_COPY_DIR/EXCLUDED/prod.md" ]; then
+    echo "Create default EXCLUDED/prod.md file..."
+    cat > "$DEPS_COPY_DIR/EXCLUDED/prod.md" << 'EOF'
+This file lists dependencies that do not need CQs or auto-detection does not work due to a bug in https://github.com/eclipse/dash-licenses
+
+| Packages | Resolved CQs |
+| --- | --- |
+EOF
+    echo "Done."
+    echo
 fi
 
 if [ ! -f $DASH_LICENSES ]; then
@@ -196,28 +197,78 @@ fi
 
 cd $PROJECT_COPY_DIR
 
+# Run the appropriate package manager processor
+PROCESSOR_EXIT_CODE=0
+
 if [ -f $PROJECT_COPY_DIR/pom.xml ]; then
     node $WORKSPACE_DIR/package-managers/mvn/index.js $ACTION $DEBUG
-    exit $?
-fi
-
-if [ -f $PROJECT_COPY_DIR/package.json ]; then
+    PROCESSOR_EXIT_CODE=$?
+elif [ -f $PROJECT_COPY_DIR/package.json ]; then
     if [ -f $PROJECT_COPY_DIR/package-lock.json ]; then
         node $WORKSPACE_DIR/package-managers/npm/index.js $ACTION $DEBUG
-        exit $?
-    fi
-
-    if [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
+        PROCESSOR_EXIT_CODE=$?
+    elif [ -f $PROJECT_COPY_DIR/yarn.lock ]; then
         if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -lt 2 ]; then
             node $WORKSPACE_DIR/package-managers/yarn/index.js $ACTION $DEBUG
-            exit $?
-        fi
-        if [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -le 4 ]; then
+            PROCESSOR_EXIT_CODE=$?
+        elif [ "$(yarn -v | sed -e s/\\./\\n/g | sed -n 1p)" -le 4 ]; then
             node $WORKSPACE_DIR/package-managers/yarn3/index.js $ACTION $DEBUG
-            exit $?
+            PROCESSOR_EXIT_CODE=$?
+        else
+            echo "Error: Unsupported yarn version."
+            exit 1
         fi
+    else
+        echo "Error: Can't find lock file for package.json."
+        exit 1
     fi
+else
+    echo "Error: Can't find any supported package manager file."
+    exit $EXIT_CODE
 fi
 
-echo "Error: Can't find any supported package manager file."
-exit $EXIT_CODE
+# If processor failed, exit with its code
+if [ $PROCESSOR_EXIT_CODE -ne 0 ]; then
+    exit $PROCESSOR_EXIT_CODE
+fi
+
+# Copy results back to the original project directory
+echo
+echo "Copying results to project directory..."
+
+# Ensure .deps directory exists in original project
+if ! mkdir -p "$DEPS_DIR" 2>/dev/null; then
+    print_permission_error
+    echo "Results are available in the container at: $DEPS_COPY_DIR"
+    echo "Use --debug flag to copy temporary files for inspection."
+    exit 1
+fi
+
+# Copy result files
+for file in prod.md dev.md problems.md; do
+    if [ -f "$DEPS_COPY_DIR/$file" ]; then
+        if ! cp "$DEPS_COPY_DIR/$file" "$DEPS_DIR/$file" 2>/dev/null; then
+            print_permission_error
+            exit 1
+        fi
+        echo "  Copied $file"
+    fi
+done
+
+# Copy EXCLUDED directory if it has content
+if [ -d "$DEPS_COPY_DIR/EXCLUDED" ]; then
+    mkdir -p "$DEPS_DIR/EXCLUDED" 2>/dev/null || true
+    cp "$DEPS_COPY_DIR/EXCLUDED/"*.md "$DEPS_DIR/EXCLUDED/" 2>/dev/null || true
+fi
+
+# Copy tmp directory if debug mode
+if [ -n "$DEBUG" ]; then
+    echo "  Copying tmp directory (debug mode)..."
+    mkdir -p "$DEPS_DIR/tmp" 2>/dev/null || true
+    cp -r "$DEPS_COPY_DIR/tmp/"* "$DEPS_DIR/tmp/" 2>/dev/null || echo "  Warning: Could not copy some tmp files"
+fi
+
+echo "Done."
+echo
+
+exit 0
