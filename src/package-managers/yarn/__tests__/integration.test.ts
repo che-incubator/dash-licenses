@@ -1,3 +1,15 @@
+/**
+ * Copyright (c) 2018-2025 Red Hat, Inc.
+ * This program and the accompanying materials are made
+ * available under the terms of the Eclipse Public License 2.0
+ * which is available at https://www.eclipse.org/legal/epl-2.0/
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ *
+ * Contributors:
+ *   Red Hat, Inc. - initial API and implementation
+ */
+
 import * as fs from 'fs';
 
 describe('Yarn Package Manager Files Integration', () => {
@@ -59,9 +71,8 @@ describe('Yarn Package Manager Files Integration', () => {
       const content = fs.readFileSync('src/package-managers/yarn/bump-deps.ts', 'utf8');
       expect(content).toContain('allDependencies.set');
       expect(content).toContain('extractDependencies');
-      expect(content).toContain('yarnProdDeps');
-      expect(content).toContain('yarnAllDeps');
-      expect(content).toContain('yarnDevDeps');
+      expect(content).toContain('prodDeps');
+      expect(content).toContain('devDeps');
     });
 
     it('should have yarn3 parser file with correct structure', () => {
@@ -72,8 +83,8 @@ describe('Yarn Package Manager Files Integration', () => {
 
     it('should have yarn3 bump-deps file with correct structure', () => {
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
-      expect(content).toContain('allDependenciesInfo.split');
-      expect(content).toContain('JSON.parse(line)');
+      expect(content).toContain('split');
+      expect(content).toContain('JSON.parse');
       expect(content).toContain('@npm:');
       expect(content).toContain('@virtual:');
       expect(content).toContain('extractDependencies');
@@ -81,19 +92,30 @@ describe('Yarn Package Manager Files Integration', () => {
   });
 
   describe('Import Validation', () => {
-    it('should have yarn/bump-deps.ts import from document module', () => {
+    it('should have yarn/bump-deps.ts import from helpers utils', () => {
       const content = fs.readFileSync('src/package-managers/yarn/bump-deps.ts', 'utf8');
       expect(content).toContain('from');
-      expect(content).toContain('document');
+      expect(content).toContain('PackageManagerUtils');
     });
 
-    it('should have yarn3/bump-deps.ts import from document module', () => {
+    it('should have yarn3/bump-deps.ts import from helpers utils', () => {
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
       expect(content).toContain('from');
-      expect(content).toContain('document');
+      expect(content).toContain('PackageManagerUtils');
+    });
+  });
+
+  describe('Class-based Architecture', () => {
+    it('should have yarn/bump-deps.ts use class pattern', () => {
+      const content = fs.readFileSync('src/package-managers/yarn/bump-deps.ts', 'utf8');
+      expect(content).toContain('class YarnDependencyProcessor');
+      expect(content).toContain('process()');
+    });
+
+    it('should have yarn3/bump-deps.ts use class pattern', () => {
+      const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
+      expect(content).toContain('class Yarn3DependencyProcessor');
+      expect(content).toContain('process()');
     });
   });
 });
-
-
-
