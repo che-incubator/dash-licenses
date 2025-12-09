@@ -53,8 +53,11 @@ export class ChunkedDashLicensesProcessor {
 
     console.log(`Total dependencies to process: ${allDependencies.length}`);
 
-    // Step 2: Split into chunks (batch * 3)
-    const chunkSize = this.options.batchSize * 3;
+    // Step 2: Split into chunks
+    // Use batch size directly to ensure ClearlyDefined queries stay small
+    // (Eclipse Foundation resolves ~30-50%, leaving remaining for ClearlyDefined)
+    // With chunk = batch, ClearlyDefined gets ~70-150 items max, which is reliable
+    const chunkSize = this.options.batchSize;
     const chunks = this.splitIntoChunks(allDependencies, chunkSize);
     
     console.log(`Split into ${chunks.length} chunks (max ${chunkSize} dependencies per chunk)`);
