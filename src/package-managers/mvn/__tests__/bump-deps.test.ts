@@ -57,21 +57,22 @@ describe('mvn/bump-deps.ts', () => {
       const content = fs.readFileSync('src/package-managers/mvn/bump-deps.ts', 'utf8');
       
       expect(content).toContain('MavenDependencyProcessor');
-      expect(content).toContain('parseMavenDependency');
-      expect(content).toContain('readMavenDependencies');
+      expect(content).toContain('parseMavenDependencyLine');
+      expect(content).toContain('readProcessedDependencies');
+      expect(content).toContain('readRawDependencies');
       expect(content).toContain('PROD_DEPENDENCIES');
       expect(content).toContain('DEV_DEPENDENCIES');
       expect(content).toContain('mvn-prod-deps.txt');
       expect(content).toContain('mvn-dev-deps.txt');
     });
 
-    it('should define parseMavenDependency method correctly', () => {
+    it('should define dependency parsing methods correctly', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/mvn/bump-deps.ts', 'utf8');
       
-      expect(content).toContain('parseMavenDependency');
-      expect(content).toContain('groupId:artifactId');
-      expect(content).toContain('cq/maven/');
+      expect(content).toContain('parseMavenDependencyLine');
+      expect(content).toContain('parseMavenRawDependency');
+      expect(content).toContain('maven/mavencentral');
     });
 
     it('should handle Maven dependency format parsing', () => {
@@ -80,7 +81,6 @@ describe('mvn/bump-deps.ts', () => {
       
       expect(content).toContain('split(\':\')');
       expect(content).toContain('split(\'/\')');
-      expect(content).toContain('groupId');
       expect(content).toContain('artifactId');
       expect(content).toContain('version');
     });
@@ -104,7 +104,6 @@ describe('mvn/bump-deps.ts', () => {
       expect(content).toContain('getFilePaths');
       expect(content).toContain('shouldWriteToDisk');
       expect(content).toContain('validateEnvironment');
-      expect(content).toContain('processAndGenerateDocuments');
     });
 
     it('should handle both PROD_DEPENDENCIES and DEV_DEPENDENCIES files', () => {
@@ -116,8 +115,15 @@ describe('mvn/bump-deps.ts', () => {
       expect(content).toContain('mvn-prod-deps.txt');
       expect(content).toContain('mvn-dev-deps.txt');
     });
+
+    it('should have custom document generation for Maven', () => {
+      const fs = require('fs');
+      const content = fs.readFileSync('src/package-managers/mvn/bump-deps.ts', 'utf8');
+      
+      // Maven has its own processAndGenerateDocuments method
+      expect(content).toContain('processAndGenerateDocuments');
+      expect(content).toContain('parseDependenciesFile');
+      expect(content).toContain('arrayToDocument');
+    });
   });
 });
-
-
-
