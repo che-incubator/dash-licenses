@@ -36,9 +36,9 @@ describe('PackageManagerUtils Integration Tests', () => {
       expect(paths.ENCODING).toBe('utf8');
       expect(paths.TMP_DIR).toBe('/test/deps/tmp');
       expect(paths.EXCLUSIONS_DIR).toBe('/test/deps/EXCLUDED');
-      expect(paths.PROD_MD).toBe('/test/deps/prod.md');
-      expect(paths.DEV_MD).toBe('/test/deps/dev.md');
-      expect(paths.PROBLEMS_MD).toBe('/test/deps/problems.md');
+      expect(paths.PROD_MD).toBe('/test/deps/tmp/prod.md');
+      expect(paths.DEV_MD).toBe('/test/deps/tmp/dev.md');
+      expect(paths.PROBLEMS_MD).toBe('/test/deps/tmp/problems.md');
       expect(paths.DEPENDENCIES).toBe('/test/deps/tmp/DEPENDENCIES');
       expect(paths.EXCLUDED_PROD_MD).toBe('/test/deps/EXCLUDED/prod.md');
       expect(paths.EXCLUDED_DEV_MD).toBe('/test/deps/EXCLUDED/dev.md');

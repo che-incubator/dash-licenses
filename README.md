@@ -87,40 +87,63 @@ Lower batch sizes (like 200) are more stable and less likely to hit API rate lim
 
 ```
 dash-licenses/
-├── .config/              # Configuration files
-│   └── copyright.js      # License header template
-├── build/               # Build and Docker files
-│   ├── create-image.sh  # Container image build script
-│   ├── dockerfiles/     # Dockerfiles and entrypoint
-│   │   ├── Dockerfile   # Main Dockerfile
-│   │   └── entrypoint.sh # Container entrypoint
-│   └── scripts/         # Additional build utilities
-├── src/                  # TypeScript source code
-│   ├── document.ts      # Document generation logic
-│   ├── helpers/         # Shared utilities
-│   │   └── utils.ts     # Common helper functions
-│   └── package-managers/ # Package manager implementations
-│       ├── mvn/         # Maven support
-│       │   ├── index.ts # Main Maven processor
-│       │   └── bump-deps.ts
-│       ├── npm/         # npm support
-│       │   ├── index.ts # Main npm processor
+├── build/                        # Build and Docker files
+│   ├── create-image.sh           # Container image build script
+│   └── dockerfiles/
+│       ├── Dockerfile            # Main Dockerfile
+│       └── entrypoint.sh         # Container entrypoint
+├── dist/                         # Compiled JavaScript output
+│   ├── document.js
+│   └── package-managers/         # Compiled package manager modules
+├── scripts/                      # Utility scripts
+│   ├── container_tool.sh         # Docker/Podman wrapper script
+│   └── strip-headers.sh          # License header utility
+├── src/                          # TypeScript source code
+│   ├── document/                 # Document generation module
+│   │   ├── __tests__/            # Document tests
+│   │   └── index.ts              # Main document logic
+│   ├── helpers/                  # Shared utilities
+│   │   ├── __tests__/            # Helper tests
+│   │   ├── chunked-processor.ts  # Batch processing utilities
+│   │   ├── package-manager-base.ts # Base class for package managers
+│   │   ├── types.ts              # TypeScript type definitions
+│   │   └── utils.ts              # Common helper functions
+│   └── package-managers/         # Package manager implementations
+│       ├── mvn/                  # Maven support
+│       │   ├── __tests__/
+│       │   ├── bump-deps.ts      # Dependency processing
+│       │   ├── index.ts          # Entry point
+│       │   └── mvn-processor.ts  # Maven-specific logic
+│       ├── npm/                  # npm support
+│       │   ├── __tests__/
+│       │   ├── bump-deps.ts
+│       │   ├── index.ts
+│       │   ├── npm-processor.ts
+│       │   └── parser.ts         # package-lock.json parser
+│       ├── yarn/                 # Yarn v1 support
+│       │   ├── __tests__/
+│       │   ├── bump-deps.ts
+│       │   ├── index.ts
 │       │   ├── parser.ts
-│       │   └── bump-deps.ts
-│       ├── yarn/        # Yarn v1 support
-│       │   ├── index.ts # Main Yarn processor
-│       │   ├── parser.ts
-│       │   └── bump-deps.ts
-│       └── yarn3/       # Yarn 3+ support
-│           ├── index.ts # Main Yarn 3 processor
+│       │   └── yarn-processor.ts
+│       └── yarn3/                # Yarn 3+ support
+│           ├── __tests__/
+│           ├── bump-deps.ts
+│           ├── index.ts
 │           ├── parser.ts
-│           └── bump-deps.ts
-├── tests/               # Test suite
-│   ├── e2e/            # End-to-end tests
-│   ├── integration/     # Integration tests
-│   └── unit/            # Unit tests
-└── scripts/             # Build and utility scripts
-    └── container_tool.sh # Container wrapper script
+│           └── yarn3-processor.ts
+├── tests/                        # End-to-end tests and fixtures
+│   ├── e2e/                      # Docker container tests
+│   │   └── docker.test.ts
+│   ├── fixtures/                 # Test data
+│   │   ├── mvn-sample/
+│   │   ├── npm-sample/
+│   │   └── yarn-sample/
+│   └── setup.ts                  # Test setup
+├── header-check.js               # License header enforcement
+├── package.json
+├── tsconfig.json                 # TypeScript configuration
+└── webpack.config.js             # Build configuration
 ```
 
 ## Development
@@ -159,19 +182,18 @@ npm test
 - `npm run test:watch` - Watch mode for tests
 - `npm run test:coverage` - Generate coverage report
 - `npm run test:unit` - Run unit tests only
-- `npm run test:integration` - Run integration tests only
+- `npm run test:e2e` - Run end-to-end tests only
 
 #### Code Quality
 
 - `npm run lint` - Run ESLint
 - `npm run lint:fix` - Fix ESLint issues automatically
-- `npm run format:check` - Check code formatting with Prettier
-- `npm run format:fix` - Fix code formatting automatically
+- `npm run type-check` - TypeScript type checking without compilation
 
 #### License Headers
 
 - `npm run header:check` - Check license headers in all files
-- `npm run header:check:verbose` - Check with verbose output
+- `npm run header:verbose` - Check with verbose output
 - `npm run header:fix` - Automatically add missing license headers
 
 ### Building the Container
@@ -199,7 +221,7 @@ Test the container locally:
 
 ### License Headers
 
-License headers are enforced using `header-check.js`. The license template is defined in `.config/copyright.js`.
+License headers are enforced using `header-check.js` at the project root.
 
 To check headers:
 ```sh
@@ -211,16 +233,13 @@ To fix missing headers:
 npm run header:fix
 ```
 
-### Code Formatting
-
-Code formatting is enforced using Prettier. Configuration is in `.prettierrc`.
-
 ### Linting
 
-ESLint configuration is in `.eslintrc.js`. It includes:
-- TypeScript support
-- Prettier integration
-- License header checking (via `header-check.js`)
+ESLint is configured for TypeScript. Run with:
+```sh
+npm run lint
+npm run lint:fix  # Auto-fix issues
+```
 
 ## How It Works
 
