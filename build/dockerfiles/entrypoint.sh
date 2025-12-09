@@ -49,7 +49,7 @@ print_permission_error() {
     echo "     docker run --user \$(id -u):\$(id -g) ..."
     echo
     echo "  2. Pre-create the .deps directory with write permissions:"
-    echo "     mkdir -p .deps && chmod 777 .deps"
+    echo "     mkdir -p .deps && chmod a+rwx .deps"
     echo
     echo "  3. On SELinux systems, add :Z to the volume mount:"
     echo "     -v \${PWD}:/workspace/project:Z"
