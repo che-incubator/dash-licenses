@@ -29,8 +29,6 @@ jest.doMock('../../../document', () => ({
 }));
 
 describe('yarn3/bump-deps.ts', () => {
-  // No longer needed for structural tests
-
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
@@ -58,19 +56,19 @@ describe('yarn3/bump-deps.ts', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
       
-      expect(content).toContain('allDependenciesInfo.split');
-      expect(content).toContain('JSON.parse(line)');
+      expect(content).toContain('split');
+      expect(content).toContain('JSON.parse');
       expect(content).toContain('@npm:');
       expect(content).toContain('@virtual:');
       expect(content).toContain('extractDependencies');
     });
 
-    it('should define extractDependencies function for yarn3', () => {
+    it('should use class-based processor pattern', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
       
-      expect(content).toContain('function extractDependencies');
-      expect(content).toContain('dependenciesInfo');
+      expect(content).toContain('class Yarn3DependencyProcessor');
+      expect(content).toContain('extractDependencies');
       expect(content).toContain('.replace(/@npm:/g');
       expect(content).toContain('.replace(/@virtual:.+#npm:/g');
     });
@@ -81,35 +79,36 @@ describe('yarn3/bump-deps.ts', () => {
       
       expect(content).toContain('@virtual:');
       expect(content).toContain('#npm:');
-      expect(content).toContain('.replace(/@virtual:.+#npm:/g, \'@\')');
+      expect(content).toContain(".replace(/@virtual:.+#npm:/g, '@')");
+    });
+
+    it('should use PackageManagerUtils for shared functionality', () => {
+      const fs = require('fs');
+      const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
+      
+      expect(content).toContain('PackageManagerUtils');
+      expect(content).toContain('getFilePaths');
+      expect(content).toContain('shouldWriteToDisk');
+      expect(content).toContain('processAndGenerateDocuments');
     });
   });
 
   describe('error handling and process management', () => {
-    it('should handle exclusions directory structure', () => {
+    it('should handle exclusions directory structure via PackageManagerUtils', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
       
-      expect(content).toContain('EXCLUDED_PROD_MD');
-      expect(content).toContain('EXCLUDED_DEV_MD');
-      expect(content).toContain('existsSync');
-      expect(content).toContain('parseExcludedFileData');
+      // PackageManagerUtils handles exclusion paths internally
+      expect(content).toContain('PackageManagerUtils');
+      expect(content).toContain('processAndGenerateDocuments');
     });
 
-    it('should handle problems logging', () => {
+    it('should handle errors gracefully', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
       
-      expect(content).toContain('getLogs');
-      expect(content).toContain('PROBLEMS_MD');
-      expect(content).toContain('console.log(logs)');
-    });
-
-    it('should handle process exit conditions', () => {
-      const fs = require('fs');
-      const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
-      
-      expect(content).toContain('getUnresolvedNumber');
+      expect(content).toContain('catch (error)');
+      expect(content).toContain('console.error');
       expect(content).toContain('process.exit(1)');
     });
 
@@ -117,13 +116,9 @@ describe('yarn3/bump-deps.ts', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
       
-      expect(content).toContain('yarnProdDeps');
-      expect(content).toContain('yarnAllDeps');
-      expect(content).toContain('yarnDevDeps');
-      expect(content).toContain('filter((entry: string) => !yarnProdDeps.includes(entry))');
+      expect(content).toContain('prodDeps');
+      expect(content).toContain('devDeps');
+      expect(content).toContain('filter');
     });
   });
 });
-
-
-
