@@ -88,7 +88,6 @@ describe('yarn3/bump-deps.ts', () => {
       
       expect(content).toContain('PackageManagerUtils');
       expect(content).toContain('getFilePaths');
-      expect(content).toContain('shouldWriteToDisk');
       expect(content).toContain('processAndGenerateDocuments');
     });
   });

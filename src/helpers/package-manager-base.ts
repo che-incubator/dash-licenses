@@ -293,11 +293,17 @@ export abstract class PackageManagerBase {
     }
     if (!differProd && !differDev && restricted === 0) {
       console.log('All found licenses are approved to use.');
-      // Delete problems.md if all checks passed
-      const problemsFile = path.join(this.env.DEPS_DIR, 'problems.md');
-      if (existsSync(problemsFile)) {
-        unlinkSync(problemsFile);
-        console.log('Removed old problems.md file (no issues found).');
+      // Delete problems.md if all checks passed (skip in check mode to avoid write operations)
+      if (!this.options.check) {
+        const problemsFile = path.join(this.env.DEPS_DIR, 'problems.md');
+        if (existsSync(problemsFile)) {
+          try {
+            unlinkSync(problemsFile);
+            console.log('Removed old problems.md file (no issues found).');
+          } catch {
+            // Ignore permission errors - entrypoint.sh will handle cleanup
+          }
+        }
       }
       process.exit(0);
     } else {
