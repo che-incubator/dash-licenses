@@ -31,8 +31,8 @@ export class ChunkedDashLicensesProcessor {
 
   constructor(options: ChunkedProcessorOptions) {
     this.options = options;
-    this.maxRetries = options.maxRetries || 3;
-    this.retryDelayMs = options.retryDelayMs || 10000; // 10 seconds
+    this.maxRetries = options.maxRetries || 9; // 3x more attempts for reliability
+    this.retryDelayMs = options.retryDelayMs || 3000; // 3 seconds between retries
   }
 
   /**
@@ -63,8 +63,8 @@ export class ChunkedDashLicensesProcessor {
     console.log(`Split into ${chunks.length} chunks (max ${chunkSize} dependencies per chunk)`);
 
     // Step 3: Process each chunk with retry logic
+    // Abort immediately if any chunk fails after all retries
     const tempFiles: string[] = [];
-    let totalFailed = 0;
 
     for (let i = 0; i < chunks.length; i++) {
       const chunkNum = i + 1;
@@ -76,8 +76,17 @@ export class ChunkedDashLicensesProcessor {
       const success = await this.processChunkWithRetry(chunks[i], tempFile, chunkNum);
       
       if (!success) {
-        console.error(`[${chunkNum}/${chunks.length}] ✗ Failed after ${this.maxRetries} attempts`);
-        totalFailed++;
+        console.error(`\n[${chunkNum}/${chunks.length}] ✗ Failed after ${this.maxRetries} attempts`);
+        console.error(`Aborting: Cannot continue with remaining ${chunks.length - chunkNum} chunks.`);
+        
+        // Clean up temporary files before aborting
+        if (!this.options.debug) {
+          this.cleanupTempFiles(tempFiles);
+        } else {
+          console.log(`Debug mode: Kept ${tempFiles.length} temporary chunk files`);
+        }
+        
+        throw new Error(`Chunk ${chunkNum} of ${chunks.length} failed after ${this.maxRetries} retries. Aborted processing.`);
       }
     }
 
@@ -91,10 +100,6 @@ export class ChunkedDashLicensesProcessor {
       this.cleanupTempFiles(tempFiles);
     } else {
       console.log(`Debug mode: Kept ${tempFiles.length} temporary chunk files`);
-    }
-
-    if (totalFailed > 0) {
-      throw new Error(`${totalFailed} of ${chunks.length} chunks failed to process. Check logs for details.`);
     }
 
     console.log(`✓ Successfully processed all ${allDependencies.length} dependencies\n`);
@@ -215,7 +220,8 @@ export class ChunkedDashLicensesProcessor {
         const isRateLimitError = errorMsg.includes('429');
         const isGatewayError = errorMsg.includes('502') || errorMsg.includes('bad gateway');
 
-        if (this.options.debug || !isLastAttempt) {
+        // Only show error details on last attempt or in debug mode
+        if (this.options.debug || isLastAttempt) {
           let errorType = 'Error';
           if (isTimeoutError) errorType = 'Timeout (HTTP 524)';
           else if (isRateLimitError) errorType = 'Rate limit (HTTP 429)';
@@ -228,9 +234,9 @@ export class ChunkedDashLicensesProcessor {
           return false;
         }
 
-        // ONLY wait before retry (not before first attempt!)
+        // Show brief retry message (not the full error)
         const delaySec = this.retryDelayMs / 1000;
-        console.log(`  ⏳ Waiting ${delaySec} seconds before retry...`);
+        console.log(`  ⏳ Retrying in ${delaySec}s... (attempt ${attempt}/${this.maxRetries} failed)`);
         await this.sleep(this.retryDelayMs);
       }
     }
