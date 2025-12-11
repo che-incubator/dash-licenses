@@ -54,9 +54,8 @@ export class YarnProcessor extends PackageManagerBase {
         dashLicensesJar: this.env.DASH_LICENSES,
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
-        debug: this.options.debug,
-        maxRetries: 3,
-        retryDelayMs: 10000
+        debug: this.options.debug
+        // Uses default: maxRetries=9, retryDelayMs=3000
       });
 
       await processor.process();

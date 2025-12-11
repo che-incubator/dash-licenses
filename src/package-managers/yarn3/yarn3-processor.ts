@@ -67,9 +67,8 @@ export class Yarn3Processor extends PackageManagerBase {
         dashLicensesJar: this.env.DASH_LICENSES,
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
-        debug: this.options.debug,
-        maxRetries: 3,
-        retryDelayMs: 10000
+        debug: this.options.debug
+        // Uses default: maxRetries=9, retryDelayMs=3000
       });
 
       await processor.process();
@@ -99,22 +98,30 @@ export class Yarn3Processor extends PackageManagerBase {
     console.log('Done.');
     console.log();
 
-    // Import yarn plugin licenses
-    console.log('importing yarn plugin licenses...');
-    execSync(
-      'yarn plugin import https://raw.githubusercontent.com/mhassan1/yarn-plugin-licenses/v0.7.0/bundles/@yarnpkg/plugin-licenses.js',
-      { cwd: this.env.PROJECT_COPY_DIR }
-    );
+    // Import yarn plugin licenses (suppress verbose output)
+    console.log('Importing yarn plugin licenses...');
+    try {
+      execSync(
+        'yarn plugin import https://raw.githubusercontent.com/mhassan1/yarn-plugin-licenses/v0.7.0/bundles/@yarnpkg/plugin-licenses.js 2>/dev/null',
+        { cwd: this.env.PROJECT_COPY_DIR, stdio: this.options.debug ? 'inherit' : 'pipe' }
+      );
+    } catch {
+      // Plugin might already be installed, continue
+      if (this.options.debug) {
+        console.log('  Note: Plugin import returned error (may already be installed)');
+      }
+    }
     console.log('Done.');
     console.log();
 
-    // Install dependencies
-    console.log('Installing dependencies...');
+    // Install dependencies (suppress verbose cleanup messages)
+    console.log('Installing dependencies (this may take a while)...');
     try {
-      execSync('yarn install', {
+      // Use pipe to suppress YN0019 cleanup messages, but capture errors
+      execSync('yarn install 2>&1', {
         cwd: this.env.PROJECT_COPY_DIR,
-        stdio: 'inherit', // Stream output directly to avoid buffer overflow
-        maxBuffer: 50 * 1024 * 1024 // 50MB buffer as fallback
+        stdio: this.options.debug ? 'inherit' : 'pipe',
+        maxBuffer: 50 * 1024 * 1024 // 50MB buffer
       });
     } catch (error: unknown) {
       const err = error as NodeJS.ErrnoException;
@@ -124,12 +131,21 @@ export class Yarn3Processor extends PackageManagerBase {
         console.error('This usually happens with very large projects.');
         console.error('The dependencies may have been installed successfully despite the error.');
       } else {
-        console.error('Error during yarn install:', err.message || err);
+        // Yarn install might return non-zero for warnings, check if node_modules exists
+        const nodeModulesExists = existsSync(path.join(this.env.PROJECT_COPY_DIR, 'node_modules')) ||
+                                  existsSync(path.join(this.env.PROJECT_COPY_DIR, '.yarn', 'cache'));
+        if (!nodeModulesExists) {
+          console.error('Error during yarn install:', err.message || err);
+          if (this.options.debug) {
+            this.copyTmpDir();
+          }
+          process.exit(1);
+        }
+        // Dependencies installed despite warnings, continue
+        if (this.options.debug) {
+          console.log('  Note: yarn install completed with warnings');
+        }
       }
-      if (this.options.debug) {
-        this.copyTmpDir();
-      }
-      process.exit(1);
     }
     console.log('Done.');
     console.log();

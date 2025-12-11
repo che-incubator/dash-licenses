@@ -98,44 +98,57 @@ export abstract class PackageManagerBase {
   }
 
   /**
-   * Copy result files (prod.md, dev.md, problems.md) to destination
+   * Copy result files (prod.md, dev.md, problems.md) from TMP_DIR to destination
+   * Note: Files are generated in TMP_DIR, then copied to DEPS_DIR (original project)
+   * If permission denied, saves as filename(1).md and shows warning with fix instructions
    */
   protected copyResultFiles(force: boolean = false): void {
     const files = ['prod.md', 'dev.md', 'problems.md'];
+    const permissionErrors: string[] = [];
 
     for (const file of files) {
-      const srcFile = path.join(this.env.DEPS_COPY_DIR, file);
+      // Files are generated in TMP_DIR (not DEPS_COPY_DIR)
+      const srcFile = path.join(this.env.TMP_DIR, file);
       const destFile = path.join(this.env.DEPS_DIR, file);
 
       if (existsSync(srcFile)) {
         if (this.options.debug) {
           console.log(`Copy ${file} to .deps...`);
+        }
+        
+        if (this.options.debug || force) {
           try {
             copyFileSync(srcFile, destFile);
-            console.log('Done.');
-          } catch (error: unknown) {
-            if (this.isPermissionError(error)) {
-              console.warn(`Warning: Permission denied copying ${file}. The file was generated but could not be written to the host directory.`);
-            } else {
-              throw error;
+            if (this.options.debug) {
+              console.log('Done.');
             }
-          }
-        } else if (force) {
-          try {
-            copyFileSync(srcFile, destFile);
           } catch (error: unknown) {
             if (this.isPermissionError(error)) {
-              console.warn(`Warning: Permission denied copying ${file}.`);
+              // Try to save as filename(1).md
+              const altFile = this.getAlternativeFilename(file);
+              const altDestFile = path.join(this.env.DEPS_DIR, altFile);
+              try {
+                copyFileSync(srcFile, altDestFile);
+                console.warn(`Warning: Permission denied overwriting ${file}. Saved as ${altFile} instead.`);
+                permissionErrors.push(file);
+              } catch (altError: unknown) {
+                if (this.isPermissionError(altError)) {
+                  console.warn(`Warning: Permission denied copying ${file}. Could not save alternative file either.`);
+                  permissionErrors.push(file);
+                } else {
+                  throw altError;
+                }
+              }
             } else {
               throw error;
             }
           }
         }
       } else if (force && file !== 'problems.md') {
-        console.error(`Error: ${file} not generated in ${this.env.DEPS_COPY_DIR}`);
+        console.error(`Error: ${file} not generated in ${this.env.TMP_DIR}`);
         process.exit(1);
       } else if (this.options.debug && file !== 'problems.md') {
-        console.error(`Warning: ${file} not found in ${this.env.DEPS_COPY_DIR}`);
+        console.error(`Warning: ${file} not found in ${this.env.TMP_DIR}`);
       } else if (file === 'problems.md' && existsSync(destFile) && !this.options.check) {
         try {
           unlinkSync(destFile);
@@ -146,6 +159,43 @@ export abstract class PackageManagerBase {
         }
       }
     }
+
+    // Show permission fix instructions if there were errors
+    if (permissionErrors.length > 0) {
+      this.printPermissionFixInstructions(permissionErrors);
+    }
+  }
+
+  /**
+   * Get alternative filename for permission-denied cases (e.g., prod.md -> prod(1).md)
+   */
+  private getAlternativeFilename(file: string): string {
+    const ext = path.extname(file);
+    const base = path.basename(file, ext);
+    return `${base}(1)${ext}`;
+  }
+
+  /**
+   * Print instructions for fixing permission issues
+   */
+  private printPermissionFixInstructions(files: string[]): void {
+    console.warn();
+    console.warn('==============================================');
+    console.warn('WARNING: Could not overwrite existing files');
+    console.warn('==============================================');
+    console.warn();
+    console.warn(`The following files could not be updated: ${files.join(', ')}`);
+    console.warn('New versions were saved with (1) suffix.');
+    console.warn();
+    console.warn('To fix, make the existing files writable:');
+    console.warn('  chmod a+w .deps/*.md');
+    console.warn();
+    console.warn('Or delete them and let the container recreate:');
+    console.warn('  rm .deps/*.md');
+    console.warn();
+    console.warn('Then run the license tool again.');
+    console.warn('==============================================');
+    console.warn();
   }
 
   /**
@@ -229,13 +279,25 @@ export abstract class PackageManagerBase {
     // Check for changes in production dependencies
     if (this.options.check) {
       console.log('Looking for changes in production dependencies list...');
-      try {
-        differProd = execSync(
-          `comm --nocheck-order -3 ${path.join(this.env.DEPS_DIR, 'prod.md')} ${path.join(this.env.TMP_DIR, 'prod.md')}`,
-          { encoding: 'utf-8' }
-        );
-      } catch {
-        // comm returns non-zero if files differ
+      const origProdFile = path.join(this.env.DEPS_DIR, 'prod.md');
+      const newProdFile = path.join(this.env.TMP_DIR, 'prod.md');
+      
+      if (!existsSync(origProdFile)) {
+        console.warn('  Warning: Original prod.md not found - dependencies not initialized yet.');
+        differProd = 'missing';
+      } else if (!existsSync(newProdFile)) {
+        console.warn('  Warning: New prod.md not generated.');
+        differProd = 'missing';
+      } else {
+        try {
+          differProd = execSync(
+            `comm --nocheck-order -3 "${origProdFile}" "${newProdFile}"`,
+            { encoding: 'utf-8' }
+          );
+        } catch {
+          // comm returns non-zero if files differ
+          differProd = 'differ';
+        }
       }
       console.log('Done.');
       console.log();
@@ -244,13 +306,25 @@ export abstract class PackageManagerBase {
     // Check for changes in development dependencies
     if (this.options.check) {
       console.log('Looking for changes in test- and development dependencies list...');
-      try {
-        differDev = execSync(
-          `comm --nocheck-order -3 ${path.join(this.env.DEPS_DIR, 'dev.md')} ${path.join(this.env.TMP_DIR, 'dev.md')}`,
-          { encoding: 'utf-8' }
-        );
-      } catch {
-        // comm returns non-zero if files differ
+      const origDevFile = path.join(this.env.DEPS_DIR, 'dev.md');
+      const newDevFile = path.join(this.env.TMP_DIR, 'dev.md');
+      
+      if (!existsSync(origDevFile)) {
+        console.warn('  Warning: Original dev.md not found - dependencies not initialized yet.');
+        differDev = 'missing';
+      } else if (!existsSync(newDevFile)) {
+        console.warn('  Warning: New dev.md not generated.');
+        differDev = 'missing';
+      } else {
+        try {
+          differDev = execSync(
+            `comm --nocheck-order -3 "${origDevFile}" "${newDevFile}"`,
+            { encoding: 'utf-8' }
+          );
+        } catch {
+          // comm returns non-zero if files differ
+          differDev = 'differ';
+        }
       }
       console.log('Done.');
       console.log();
@@ -261,50 +335,42 @@ export abstract class PackageManagerBase {
 
   /**
    * Handle results based on mode and copy files as needed
+   * Note: File copying to the mounted project directory is handled by entrypoint.sh
+   * to avoid permission issues. Node code only generates files to TMP_DIR.
    */
   protected handleResults(result: PackageManagerResult): void {
     const { differProd, differDev, restricted } = result;
 
-    // Handle debug or copy mode
-    if (this.options.debug) {
-      this.copyTmpDir();
-      this.copyResultFiles(true);
-      console.log();
-    } else if (!this.options.check) {
-      this.copyResultFiles(true);
-      // Delete tmp directory if not in debug mode
-      const tmpDir = path.join(this.env.DEPS_DIR, 'tmp');
-      if (existsSync(tmpDir)) {
-        execSync(`rm -rf ${tmpDir}`);
-      }
-    }
-
-    // Report errors
+    // Report outdated dependencies as warnings in check mode (not errors)
+    // Only restricted dependencies should cause check mode to fail
     if (differProd) {
-      console.error('Error: The list of production dependencies is outdated. Please run the following command and commit changes:');
+      if (this.options.check && restricted === 0) {
+        console.warn('Warning: The list of production dependencies is outdated. Please run the following command and commit changes:');
+      } else {
+        console.error('Error: The list of production dependencies is outdated. Please run the following command and commit changes:');
+      }
       console.error(this.buildInfoMsg());
     }
     if (differDev) {
-      console.error('Error: The list of development dependencies is outdated. Please run the following command and commit changes:');
+      if (this.options.check && restricted === 0) {
+        console.warn('Warning: The list of development dependencies is outdated. Please run the following command and commit changes:');
+      } else {
+        console.error('Error: The list of development dependencies is outdated. Please run the following command and commit changes:');
+      }
       console.error(this.buildInfoMsg());
     }
     if (restricted !== 0) {
       console.error('Error: Restricted dependencies are found in the project.');
     }
-    if (!differProd && !differDev && restricted === 0) {
+
+    // Determine exit code
+    // - In check mode: only fail if there are restricted dependencies
+    // - In generate mode: fail if anything is wrong
+    const hasOutdatedDeps = differProd || differDev;
+    const shouldFail = this.options.check ? (restricted !== 0) : (hasOutdatedDeps || restricted !== 0);
+
+    if (!shouldFail) {
       console.log('All found licenses are approved to use.');
-      // Delete problems.md if all checks passed (skip in check mode to avoid write operations)
-      if (!this.options.check) {
-        const problemsFile = path.join(this.env.DEPS_DIR, 'problems.md');
-        if (existsSync(problemsFile)) {
-          try {
-            unlinkSync(problemsFile);
-            console.log('Removed old problems.md file (no issues found).');
-          } catch {
-            // Ignore permission errors - entrypoint.sh will handle cleanup
-          }
-        }
-      }
       process.exit(0);
     } else {
       process.exit(1);
