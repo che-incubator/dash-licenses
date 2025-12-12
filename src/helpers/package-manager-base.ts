@@ -168,11 +168,22 @@ export abstract class PackageManagerBase {
 
   /**
    * Get alternative filename for permission-denied cases (e.g., prod.md -> prod(1).md)
+   * Checks for existing files and increments the number until a free name is found
    */
   private getAlternativeFilename(file: string): string {
     const ext = path.extname(file);
     const base = path.basename(file, ext);
-    return `${base}(1)${ext}`;
+    
+    let counter = 1;
+    let altFilename = `${base}(${counter})${ext}`;
+    
+    // Check if alternative file already exists, increment until we find a free name (max 9)
+    while (existsSync(path.join(this.env.DEPS_DIR, altFilename)) && counter < 9) {
+      counter++;
+      altFilename = `${base}(${counter})${ext}`;
+    }
+    
+    return altFilename;
   }
 
   /**
@@ -185,7 +196,7 @@ export abstract class PackageManagerBase {
     console.warn('==============================================');
     console.warn();
     console.warn(`The following files could not be updated: ${files.join(', ')}`);
-    console.warn('New versions were saved with (1) suffix.');
+    console.warn('New versions were saved with numeric suffix.');
     console.warn();
     console.warn('To fix, make the existing files writable:');
     console.warn('  chmod a+w .deps/*.md');

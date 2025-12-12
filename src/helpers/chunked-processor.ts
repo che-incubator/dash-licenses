@@ -13,6 +13,12 @@
 import { execSync } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 
+/** Default maximum number of retry attempts for chunk processing */
+const DEFAULT_MAX_RETRIES = 9;
+
+/** Default delay between retries in milliseconds */
+const DEFAULT_RETRY_DELAY_MS = 3000;
+
 export interface ChunkedProcessorOptions {
   parserScript: string;
   parserInput: string;
@@ -31,8 +37,8 @@ export class ChunkedDashLicensesProcessor {
 
   constructor(options: ChunkedProcessorOptions) {
     this.options = options;
-    this.maxRetries = options.maxRetries || 9; // 3x more attempts for reliability
-    this.retryDelayMs = options.retryDelayMs || 3000; // 3 seconds between retries
+    this.maxRetries = options.maxRetries || DEFAULT_MAX_RETRIES;
+    this.retryDelayMs = options.retryDelayMs || DEFAULT_RETRY_DELAY_MS;
   }
 
   /**
