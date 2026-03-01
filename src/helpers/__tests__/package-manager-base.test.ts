@@ -140,6 +140,7 @@ describe('Options interface', () => {
     const options: Options = {
       check: true,
       debug: false,
+      harvest: false,
     };
 
     expect(options).toHaveProperty('check');
