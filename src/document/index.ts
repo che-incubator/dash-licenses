@@ -85,7 +85,8 @@ export class DependencyParser {
   public static parseDependenciesFile(
     fileData: string,
     dependenciesMap: DependencyMap,
-    allLicenses?: LicenseMap
+    allLicenses?: LicenseMap,
+    unusedExcludesOut?: string[]
   ): void {
     if (typeof fileData !== 'string') {
       throw new Error('fileData must be a string');
@@ -191,6 +192,7 @@ export class DependencyParser {
 
             if (dependenciesMap.has(identifier)) {
               log += `\n${++numberUnusedExcludes}. \`${identifier}\``;
+              unusedExcludesOut?.push(identifier);
               return;
             }
 
@@ -204,7 +206,7 @@ export class DependencyParser {
         }
       });
 
-    if (numberUnusedExcludes > 0) {
+    if (numberUnusedExcludes > 0 && !unusedExcludesOut) {
       logger.addLog(`${log}\n`);
     }
   }
@@ -291,9 +293,10 @@ export function parseExcludedFileData(fileData: string, depsMap: DependencyMap):
 export function parseDependenciesFile(
   fileData: string,
   dependenciesMap: DependencyMap,
-  allLicenses?: LicenseMap
+  allLicenses?: LicenseMap,
+  unusedExcludesOut?: string[]
 ): void {
-  return DependencyParser.parseDependenciesFile(fileData, dependenciesMap, allLicenses);
+  return DependencyParser.parseDependenciesFile(fileData, dependenciesMap, allLicenses, unusedExcludesOut);
 }
 
 export function arrayToDocument(
