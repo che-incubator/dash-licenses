@@ -21,6 +21,8 @@ import {
   type DependencyMap,
   type LicenseMap
 } from '../document';
+import { runJarFallback } from './jar-fallback';
+import { logger } from './logger';
 
 /**
  * Interface for file paths configuration
@@ -44,6 +46,51 @@ export interface FilePaths {
 export interface PackageIdentifier {
   name: string;
   version: string;
+}
+
+/**
+ * File name constants
+ */
+export const FILE_NAMES = {
+  PROD_MD: 'prod.md',
+  DEV_MD: 'dev.md',
+  PROBLEMS_MD: 'problems.md',
+  DEPENDENCIES: 'DEPENDENCIES'
+} as const;
+
+/**
+ * Regex patterns
+ */
+export const PATTERNS = {
+  EXCLUDED_TABLE: /^\| `([^|^ ]+)` \| ([^|]+) \|$/gm
+} as const;
+
+/**
+ * Utility functions
+ */
+
+/**
+ * Sleep for specified milliseconds
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Parse non-empty lines from content
+ */
+export function parseNonEmptyLines(content: string): string[] {
+  return content
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+}
+
+/**
+ * Get error message from unknown error
+ */
+export function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -72,12 +119,12 @@ export class PackageManagerUtils {
       EXCLUSIONS_DIR,
       // Write generated files to TMP_DIR so they can be compared in --check mode
       // and then copied to final destination by entrypoint.sh in generate mode
-      PROD_MD: path.join(TMP_DIR, 'prod.md'),
-      DEV_MD: path.join(TMP_DIR, 'dev.md'),
-      PROBLEMS_MD: path.join(TMP_DIR, 'problems.md'),
-      DEPENDENCIES: path.join(TMP_DIR, 'DEPENDENCIES'),
-      EXCLUDED_PROD_MD: path.join(EXCLUSIONS_DIR, 'prod.md'),
-      EXCLUDED_DEV_MD: path.join(EXCLUSIONS_DIR, 'dev.md')
+      PROD_MD: path.join(TMP_DIR, FILE_NAMES.PROD_MD),
+      DEV_MD: path.join(TMP_DIR, FILE_NAMES.DEV_MD),
+      PROBLEMS_MD: path.join(TMP_DIR, FILE_NAMES.PROBLEMS_MD),
+      DEPENDENCIES: path.join(TMP_DIR, FILE_NAMES.DEPENDENCIES),
+      EXCLUDED_PROD_MD: path.join(EXCLUSIONS_DIR, FILE_NAMES.PROD_MD),
+      EXCLUDED_DEV_MD: path.join(EXCLUSIONS_DIR, FILE_NAMES.DEV_MD)
     };
   }
 
@@ -96,20 +143,55 @@ export class PackageManagerUtils {
    * @param excludedProdPath - Path to excluded production dependencies file
    * @param excludedDevPath - Path to excluded development dependencies file
    * @param encoding - File encoding
+   * @param excludedProdIds - Optional set to collect identifiers from prod file
+   * @param excludedDevIds - Optional set to collect identifiers from dev file
    */
   public static processExcludedDependencies(
     depsToCQ: DependencyMap,
     excludedProdPath: string,
     excludedDevPath: string,
-    encoding: string
+    encoding: string,
+    excludedProdIds?: Set<string>,
+    excludedDevIds?: Set<string>
   ): void {
     if (existsSync(excludedProdPath)) {
-      parseExcludedFileData(readFileSync(excludedProdPath, { encoding: encoding as BufferEncoding }), depsToCQ);
+      const content = readFileSync(excludedProdPath, { encoding: encoding as BufferEncoding });
+      parseExcludedFileData(content, depsToCQ);
+      if (excludedProdIds) {
+        let m: RegExpExecArray | null;
+        while ((m = PATTERNS.EXCLUDED_TABLE.exec(content)) !== null) excludedProdIds.add(m[1]);
+      }
     }
-    
     if (existsSync(excludedDevPath)) {
-      parseExcludedFileData(readFileSync(excludedDevPath, { encoding: encoding as BufferEncoding }), depsToCQ);
+      const content = readFileSync(excludedDevPath, { encoding: encoding as BufferEncoding });
+      parseExcludedFileData(content, depsToCQ);
+      if (excludedDevIds) {
+        let m: RegExpExecArray | null;
+        while ((m = PATTERNS.EXCLUDED_TABLE.exec(content)) !== null) excludedDevIds.add(m[1]);
+      }
     }
+  }
+
+  /**
+   * Remove given identifiers from an EXCLUDED markdown file (table rows only).
+   * Preserves header and comment lines.
+   */
+  public static removeUnusedExcludes(
+    excludedPath: string,
+    identifiersToRemove: Set<string>,
+    encoding: string
+  ): void {
+    if (!existsSync(excludedPath) || identifiersToRemove.size === 0) return;
+    const content = readFileSync(excludedPath, { encoding: encoding as BufferEncoding });
+    const lines = content.split(/\r?\n/);
+    const tablePattern = /^\| `([^|^ ]+)` \| ([^|]+) \|$/;
+    const kept: string[] = [];
+    for (const line of lines) {
+      const m = line.match(tablePattern);
+      if (m && identifiersToRemove.has(m[1])) continue;
+      kept.push(line);
+    }
+    writeFileSync(excludedPath, kept.join('\n') + (kept.length ? '\n' : ''), { encoding: encoding as BufferEncoding });
   }
 
   /**
@@ -129,13 +211,17 @@ export class PackageManagerUtils {
   ): void {
     try {
       const depsToCQ: DependencyMap = new Map();
-      
+      const excludedProdIds = new Set<string>();
+      const excludedDevIds = new Set<string>();
+
       // Process excluded dependencies
       this.processExcludedDependencies(
-        depsToCQ, 
-        paths.EXCLUDED_PROD_MD, 
-        paths.EXCLUDED_DEV_MD, 
-        paths.ENCODING
+        depsToCQ,
+        paths.EXCLUDED_PROD_MD,
+        paths.EXCLUDED_DEV_MD,
+        paths.ENCODING,
+        excludedProdIds,
+        excludedDevIds
       );
 
       // Parse main dependencies file
@@ -143,7 +229,7 @@ export class PackageManagerUtils {
         const errorMsg = `Error: DEPENDENCIES file not found at ${paths.DEPENDENCIES}`;
         console.error(errorMsg);
         writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
-        process.exit(1);
+        throw new Error(errorMsg);
       }
 
       const dependenciesStr = readFileSync(paths.DEPENDENCIES, { encoding: paths.ENCODING as BufferEncoding });
@@ -151,22 +237,67 @@ export class PackageManagerUtils {
         const errorMsg = `Error: DEPENDENCIES file is empty at ${paths.DEPENDENCIES}`;
         console.error(errorMsg);
         writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
-        process.exit(1);
+        throw new Error(errorMsg);
       }
 
-      parseDependenciesFile(dependenciesStr, depsToCQ, allDependencies);
+      const unusedExcludes: string[] = [];
+      parseDependenciesFile(dependenciesStr, depsToCQ, allDependencies, unusedExcludes);
+
+      // Auto-remove UNUSED Excludes from EXCLUDED files
+      if (unusedExcludes.length > 0) {
+        const toRemoveFromProd = unusedExcludes.filter(id => excludedProdIds.has(id));
+        const toRemoveFromDev = unusedExcludes.filter(id => excludedDevIds.has(id));
+        if (toRemoveFromProd.length > 0) {
+          this.removeUnusedExcludes(paths.EXCLUDED_PROD_MD, new Set(toRemoveFromProd), paths.ENCODING);
+          logger.info(`Removed ${toRemoveFromProd.length} unused exclude(s) from EXCLUDED/prod.md`);
+        }
+        if (toRemoveFromDev.length > 0) {
+          this.removeUnusedExcludes(paths.EXCLUDED_DEV_MD, new Set(toRemoveFromDev), paths.ENCODING);
+          logger.info(`Removed ${toRemoveFromDev.length} unused exclude(s) from EXCLUDED/dev.md`);
+        }
+      }
+
+      // JAR fallback: if jarPath is set and we have unresolved deps, run Eclipse JAR and add approved to EXCLUDED
+      const jarPath = process.env.JAR_PATH;
+      const projectPath = process.env.PROJECT_COPY_DIR || path.dirname(paths.DEPS_DIR);
+
+      // Process unresolved production dependencies with JAR
+      const unresolvedProdDeps = prodDeps.filter(d => !depsToCQ.has(d));
+      if (jarPath && unresolvedProdDeps.length > 0) {
+        const approvedFromJar = runJarFallback(
+          jarPath,
+          projectPath,
+          unresolvedProdDeps,
+          paths.EXCLUDED_PROD_MD,
+          paths.ENCODING
+        );
+        approvedFromJar.forEach((cq, id) => depsToCQ.set(id, cq));
+      }
+
+      // Process unresolved development dependencies with JAR
+      const unresolvedDevDeps = devDeps.filter(d => !depsToCQ.has(d));
+      if (jarPath && unresolvedDevDeps.length > 0) {
+        const approvedFromJar = runJarFallback(
+          jarPath,
+          projectPath,
+          unresolvedDevDeps,
+          paths.EXCLUDED_DEV_MD,
+          paths.ENCODING
+        );
+        approvedFromJar.forEach((cq, id) => depsToCQ.set(id, cq));
+      }
 
       // Generate production dependencies document
       // Always write to TMP_DIR for comparison (entrypoint.sh handles copying to final destination)
       const prodDepsData = arrayToDocument('Production dependencies', prodDeps, depsToCQ, allDependencies);
       try {
         writeFileSync(paths.PROD_MD, prodDepsData, { encoding: paths.ENCODING as BufferEncoding });
-        console.log(`Generated ${paths.PROD_MD} (${prodDeps.length} dependencies)`);
+        logger.success(`Generated ${paths.PROD_MD} (${prodDeps.length} dependencies)`);
       } catch (error) {
         const errorMsg = `Error writing prod.md to ${paths.PROD_MD}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        console.error(errorMsg);
+        logger.error(errorMsg);
         writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
-        process.exit(1);
+        throw new Error(errorMsg);
       }
 
       // Generate development dependencies document
@@ -174,12 +305,12 @@ export class PackageManagerUtils {
       const devDepsData = arrayToDocument('Development dependencies', devDeps, depsToCQ, allDependencies);
       try {
         writeFileSync(paths.DEV_MD, devDepsData, { encoding: paths.ENCODING as BufferEncoding });
-        console.log(`Generated ${paths.DEV_MD} (${devDeps.length} dependencies)`);
+        logger.success(`Generated ${paths.DEV_MD} (${devDeps.length} dependencies)`);
       } catch (error) {
         const errorMsg = `Error writing dev.md to ${paths.DEV_MD}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        console.error(errorMsg);
+        logger.error(errorMsg);
         writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n`, { encoding: paths.ENCODING as BufferEncoding });
-        process.exit(1);
+        throw new Error(errorMsg);
       }
 
       // Handle logs and problems
@@ -187,32 +318,40 @@ export class PackageManagerUtils {
       const logs = getLogs();
       if (logs) {
         writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n${logs}`, { encoding: paths.ENCODING as BufferEncoding });
+        logger.warn('Dependency analysis found issues:');
         console.log(logs);
       } else if (existsSync(paths.PROBLEMS_MD)) {
         // Delete old problems.md in TMP_DIR if all checks passed and no issues found
         unlinkSync(paths.PROBLEMS_MD);
-        console.log('All checks passed. Removed old problems.md file.');
+        logger.success('All checks passed. Removed old problems.md file.');
       }
 
-      // Exit with error code if there are unresolved dependencies
+      // Check for unresolved dependencies
       const unresolvedCount = getUnresolvedNumber();
       if (unresolvedCount > 0) {
-        const errorMsg = `Error: Found ${unresolvedCount} unresolved dependencies. See problems.md for details.`;
-        console.error(errorMsg);
-        process.exit(1);
+        const errorMsg = `Found ${unresolvedCount} unresolved dependencies. See problems.md for details.`;
+        logger.error(errorMsg);
+        throw new Error(errorMsg);
       }
     } catch (error) {
       const errorMsg = `Error processing dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(errorMsg);
+      logger.error(errorMsg);
       if (error instanceof Error && error.stack) {
-        console.error(error.stack);
+        logger.debug(error.stack);
       }
-      try {
-        writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n${error instanceof Error && error.stack ? error.stack : ''}\n`, { encoding: paths.ENCODING as BufferEncoding });
-      } catch {
-        // Ignore errors writing problems.md if we're already in error state
+
+      // Don't overwrite problems.md if this is the expected "unresolved dependencies" error
+      // In that case, problems.md was already written correctly by getLogs()
+      const isUnresolvedDepsError = error instanceof Error && error.message.startsWith('Found ') && error.message.includes('unresolved dependencies');
+
+      if (!isUnresolvedDepsError) {
+        try {
+          writeFileSync(paths.PROBLEMS_MD, `# Dependency analysis\n\n${errorMsg}\n${error instanceof Error && error.stack ? error.stack : ''}\n`, { encoding: paths.ENCODING as BufferEncoding });
+        } catch {
+          // Ignore errors writing problems.md if we're already in error state
+        }
       }
-      process.exit(1);
+      throw error;
     }
   }
 
