@@ -6,7 +6,7 @@ The `--debug` flag allows you to generate test fixture files from a real project
 
 ## How It Works
 
-When you run the dash-licenses container with the `--debug` flag, it:
+When you run dash-licenses with the `--debug` flag, it:
 
 1. Processes the project dependencies normally
 2. **Copies all TMP directory files to the `.deps` directory** in your project
@@ -23,9 +23,7 @@ When you run the dash-licenses container with the `--debug` flag, it:
 ### Step 1: Run with --debug flag
 
 ```bash
-podman run --rm -t \
-  -v ${PWD}:/workspace/project \
-  quay.io/che-incubator/dash-licenses:next --debug
+npx dash-licenses --debug
 ```
 
 This will create a `.deps` directory in your project root with all the generated files.
@@ -43,9 +41,6 @@ cp -r .deps tests/fixtures/yarn-sample/
 
 # For yarn3 projects
 cp -r .deps tests/fixtures/yarn3-sample/
-
-# For maven projects
-cp -r .deps tests/fixtures/mvn-sample/
 ```
 
 ### Step 3: Use in unit tests
@@ -84,8 +79,8 @@ After running with `--debug`, your `.deps` directory will have this structure:
 ├── tmp/
 │   ├── DEPENDENCIES              # Main dependencies file from dash-licenses
 │   ├── dependencies-info.json    # Parsed dependency info (npm/yarn)
-│   ├── yarn-deps-info.json       # Yarn-specific dependency info
-│   ├── yarn-deps.json            # Yarn3 dependency info
+│   ├── yarn-deps-info.json       # Yarn v1 dependency info
+│   ├── yarn3-deps-info.json      # Yarn3 lockfile-based prod/dev
 │   ├── prod.md                   # Generated production deps
 │   ├── dev.md                    # Generated development deps
 │   └── problems.md               # Dependency problems
@@ -117,5 +112,5 @@ cp -r .deps/* ../dash-licenses/tests/fixtures/yarn-sample/
 - The `.deps` directory is gitignored by default
 - Test fixtures should be committed to the repository for consistent testing
 - Update fixtures when dependency structures change significantly
-- Use different fixture sets for different package managers (npm, yarn, yarn3, mvn)
+- Use different fixture sets for different package managers (npm, yarn, yarn3)
 
