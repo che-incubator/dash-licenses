@@ -1,13 +1,38 @@
 {
-  "name": "dash-licenses",
-  "version": "1.0.0",
-  "description": "Container wrapper for Eclipse Dash License Tool",
-  "main": "dist/document.js",
-  "types": "dist/document.d.ts",
+  "name": "license-tool",
+  "version": "2.0.0",
+  "description": "Node.js library for dependency license analysis using ClearlyDefined API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "license-tool": "dist/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/che-incubator/dash-licenses.git"
+  },
+  "author": "Red Hat, Inc.",
+  "license": "EPL-2.0",
+  "keywords": [
+    "license",
+    "dependencies",
+    "eclipse",
+    "dash",
+    "clearlydefined",
+    "node"
+  ],
+  "bugs": {
+    "url": "https://github.com/che-incubator/dash-licenses/issues"
+  },
+  "homepage": "https://github.com/che-incubator/dash-licenses#readme",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "clean": "rimraf dist/ *.tsbuildinfo",
     "prebuild": "npm run clean",
     "build": "webpack --mode production",
+    "postbuild": "chmod +x dist/cli.js",
     "build:dev": "webpack --mode development",
     "build:watch": "webpack --mode development --watch",
     "build:clean": "npm run clean && npm run build",
@@ -24,67 +49,27 @@
     "header:verbose": "node header-check.js --verbose",
     "type-check": "tsc --noEmit"
   },
+  "dependencies": {
+    "@yarnpkg/parsers": "^3.0.3",
+    "axios": "^1.13.5",
+    "chalk": "^4.1.2",
+    "loglevel": "^1.9.2"
+  },
   "devDependencies": {
-    "jest": "^29.7.0",
-    "eslint": "^8.55.0",
-    "eslint-plugin-notice": "^0.9.10",
     "@types/jest": "^29.5.8",
     "@types/node": "^20.10.0",
-    "supertest": "^6.3.3",
-    "typescript": "^5.9.2",
     "@typescript-eslint/eslint-plugin": "^8.18.2",
     "@typescript-eslint/parser": "^8.18.2",
+    "eslint": "^8.55.0",
+    "eslint-plugin-notice": "^0.9.10",
+    "jest": "^29.7.0",
+    "rimraf": "^5.0.0",
+    "supertest": "^6.3.3",
     "ts-jest": "^29.1.0",
-    "ts-node": "^10.9.0",
     "ts-loader": "^9.5.1",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.9.2",
     "webpack": "^5.90.0",
-    "webpack-cli": "^5.1.4",
-    "rimraf": "^5.0.0"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "collectCoverageFrom": [
-      "src/**/*.{js,ts}",
-      "!src/**/*.{test,spec}.{js,ts}",
-      "!**/node_modules/**"
-    ],
-    "coverageDirectory": "coverage",
-    "coverageReporters": [
-      "text",
-      "lcov",
-      "html"
-    ],
-    "testMatch": [
-      "**/__tests__/**/*.{test,spec}.{js,ts}",
-      "**/tests/**/*.{test,spec}.{js,ts}"
-    ],
-    "setupFilesAfterEnv": [
-      "<rootDir>/tests/setup.ts"
-    ],
-    "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"],
-    "transform": {
-      "^.+\\.(ts|tsx)$": "ts-jest"
-    }
-  },
-  "engines": {
-    "node": ">=20.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/che-incubator/dash-licenses.git"
-  },
-  "keywords": [
-    "license",
-    "dependencies",
-    "eclipse",
-    "dash",
-    "container"
-  ],
-  "author": "Red Hat, Inc.",
-  "license": "EPL-2.0",
-  "bugs": {
-    "url": "https://github.com/che-incubator/dash-licenses/issues"
-  },
-  "homepage": "https://github.com/che-incubator/dash-licenses#readme"
+    "webpack-cli": "^5.1.4"
+  }
 }
