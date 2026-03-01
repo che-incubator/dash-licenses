@@ -26,7 +26,7 @@ interface DependenciesInfo {
 /**
  * NPM package manager bump dependencies implementation
  */
-class NpmDependencyProcessor {
+export class NpmDependencyProcessor {
   private readonly paths: FilePaths;
   private readonly allDependencies: LicenseMap;
   
@@ -107,11 +107,7 @@ class NpmDependencyProcessor {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error processing NPM dependencies:', errorMessage);
-      process.exit(1);
+      throw error;
     }
   }
 }
-
-// Execute the processor
-const processor = new NpmDependencyProcessor();
-processor.process();

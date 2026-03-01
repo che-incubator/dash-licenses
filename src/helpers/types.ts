@@ -29,6 +29,7 @@ export interface Environment {
 export interface Options {
   check: boolean;
   debug: boolean;
+  harvest: boolean;
 }
 
 /**
@@ -41,10 +42,11 @@ export interface PackageManagerResult {
 }
 
 /**
- * Parse environment variables and return Environment object
+ * Parse environment variables and return Environment object.
+ * Pass overrides for library usage (config-based).
  */
-export function parseEnvironment(): Environment {
-  return {
+export function parseEnvironment(overrides?: Partial<Environment>): Environment {
+  const env = {
     BATCH_SIZE: process.env.BATCH_SIZE || '500',
     PROJECT_COPY_DIR: process.env.PROJECT_COPY_DIR || '',
     TMP_DIR: process.env.TMP_DIR || '',
@@ -53,14 +55,21 @@ export function parseEnvironment(): Environment {
     WORKSPACE_DIR: process.env.WORKSPACE_DIR || '',
     DASH_LICENSES: process.env.DASH_LICENSES || '',
   };
+  if (overrides && overrides.PROJECT_COPY_DIR && overrides.WORKSPACE_DIR) {
+    return { ...env, ...overrides } as Environment;
+  }
+  return overrides ? { ...env, ...overrides } : env;
 }
 
 /**
- * Parse command line arguments and return Options object
+ * Parse command line arguments and return Options object.
+ * Pass overrides for library usage.
  */
-export function parseOptions(): Options {
-  return {
+export function parseOptions(overrides?: Partial<Options>): Options {
+  const opts = {
     check: process.argv.includes('--check'),
     debug: process.argv.includes('--debug'),
+    harvest: process.argv.includes('--harvest'),
   };
+  return overrides ? { ...opts, ...overrides } : opts;
 }

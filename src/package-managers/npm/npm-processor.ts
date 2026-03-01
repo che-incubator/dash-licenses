@@ -11,42 +11,63 @@
  */
 
 import * as path from 'path';
+import { writeFileSync } from 'fs';
 import { PackageManagerBase } from '../../helpers/package-manager-base';
 import { ChunkedDashLicensesProcessor } from '../../helpers/chunked-processor';
+import { parseNpmDependencies } from './parser';
+import { NpmDependencyProcessor } from './bump-deps';
+import type { Environment, Options } from '../../helpers/types';
 
 /**
  * NPM package manager processor.
  * Handles dependency analysis for projects using npm (package-lock.json).
+ * Uses ClearlyDefined HTTP API for license resolution (no Java/JAR required).
  */
 export class NpmProcessor extends PackageManagerBase {
-  constructor() {
-    super({
-      name: 'npm',
-      projectFile: 'package.json',
-      // npm doesn't require package-lock.json to exist (can use package.json)
-    });
+  constructor(env?: Environment, options?: Options) {
+    super(
+      {
+        name: 'npm',
+        projectFile: 'package.json'
+      },
+      env,
+      options
+    );
   }
 
   /**
    * Generate dependencies using npm-specific tooling.
-   * Uses the parser.js script to extract dependencies and ChunkedDashLicensesProcessor
-   * for license analysis.
+   * Parses package-lock.json and uses ChunkedDashLicensesProcessor
+   * with ClearlyDefined HTTP backend for license analysis.
    */
   protected async generateDependencies(): Promise<void> {
     console.log(`Generating a temporary DEPENDENCIES file (batch size: ${this.env.BATCH_SIZE})...`);
-    
-    const parserScript = path.join(this.env.WORKSPACE_DIR, 'package-managers/npm/parser.js');
+
+    // Parse dependencies from package-lock.json
+    const allDeps = parseNpmDependencies(this.env.PROJECT_COPY_DIR);
+
+    // Write dependencies info for bump-deps to use
+    const depsInfoPath = path.join(this.env.TMP_DIR, 'dependencies-info.json');
+    writeFileSync(depsInfoPath, JSON.stringify(allDeps, null, 2));
+
+    // Get all dependencies for ClearlyDefined processing
+    const allDepsArray = [...allDeps.dependencies, ...allDeps.devDependencies];
+
+    // Write to temp file for chunked processor
+    const allDepsFile = path.join(this.env.TMP_DIR, 'npm-all-deps.txt');
+    writeFileSync(allDepsFile, allDepsArray.join('\n') + '\n', 'utf8');
+
     const depsFilePath = path.join(this.env.TMP_DIR, 'DEPENDENCIES');
 
     try {
       const processor = new ChunkedDashLicensesProcessor({
-        parserScript,
-        parserInput: '', // npm parser doesn't need input, reads from project
-        dashLicensesJar: this.env.DASH_LICENSES,
+        parserScript: 'cat',
+        parserInput: allDepsFile,
+        parserEnv: this.env as unknown as NodeJS.ProcessEnv,
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
-        debug: this.options.debug
-        // Uses default: maxRetries=9, retryDelayMs=3000
+        debug: this.options.debug,
+        enableHarvest: this.options.harvest
       });
 
       await processor.process();
@@ -58,6 +79,21 @@ export class NpmProcessor extends PackageManagerBase {
         this.copyTmpDir();
       }
       process.exit(1);
+    }
+  }
+
+  /**
+   * Override: Run bump-deps directly instead of via execSync
+   */
+  protected override async runBumpDeps(): Promise<number> {
+    console.log('Checking dependencies for restrictions to use...');
+    try {
+      const processor = new NpmDependencyProcessor();
+      processor.process();
+      return 0;
+    } catch (error) {
+      // Error already logged by the processor
+      return 1;
     }
   }
 }

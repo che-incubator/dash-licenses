@@ -52,40 +52,35 @@ describe('yarn3/bump-deps.ts', () => {
 
   describe('yarn3 dependencies processing', () => {
     it('should have proper file structure for yarn3 dependencies', () => {
-      // Test structure rather than runtime behavior
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
-      
-      expect(content).toContain('split');
+
       expect(content).toContain('JSON.parse');
-      expect(content).toContain('@npm:');
-      expect(content).toContain('@virtual:');
-      expect(content).toContain('extractDependencies');
+      expect(content).toContain('yarn3-deps-info.json');
+      expect(content).toContain('extractLicenseInfo');
     });
 
     it('should use class-based processor pattern', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
-      
+
       expect(content).toContain('class Yarn3DependencyProcessor');
-      expect(content).toContain('extractDependencies');
-      expect(content).toContain('.replace(/@npm:/g');
-      expect(content).toContain('.replace(/@virtual:.+#npm:/g');
+      expect(content).toContain('extractLicenseInfo');
+      expect(content).toContain('processAndGenerateDocuments');
     });
 
-    it('should handle virtual package name cleaning', () => {
+    it('should read lockfile-based deps info', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
-      
-      expect(content).toContain('@virtual:');
-      expect(content).toContain('#npm:');
-      expect(content).toContain(".replace(/@virtual:.+#npm:/g, '@')");
+
+      expect(content).toContain('dependencies');
+      expect(content).toContain('devDependencies');
     });
 
     it('should use PackageManagerUtils for shared functionality', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
-      
+
       expect(content).toContain('PackageManagerUtils');
       expect(content).toContain('getFilePaths');
       expect(content).toContain('processAndGenerateDocuments');
@@ -105,19 +100,18 @@ describe('yarn3/bump-deps.ts', () => {
     it('should handle errors gracefully', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
-      
+
       expect(content).toContain('catch (error)');
       expect(content).toContain('console.error');
-      expect(content).toContain('process.exit(1)');
+      expect(content).toContain('throw error');
     });
 
     it('should handle dependency separation logic', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
-      
+
       expect(content).toContain('prodDeps');
       expect(content).toContain('devDeps');
-      expect(content).toContain('filter');
     });
   });
 });

@@ -19,18 +19,8 @@ module.exports = (env, argv) => {
   return {
     mode: isProduction ? 'production' : 'development',
     entry: {
-      document: path.join(__dirname, 'src/document/index.ts'),
-      'package-managers/mvn/index': path.join(__dirname, 'src/package-managers/mvn/index.ts'),
-      'package-managers/npm/index': path.join(__dirname, 'src/package-managers/npm/index.ts'),
-      'package-managers/yarn/index': path.join(__dirname, 'src/package-managers/yarn/index.ts'),
-      'package-managers/yarn3/index': path.join(__dirname, 'src/package-managers/yarn3/index.ts'),
-      'package-managers/mvn/bump-deps': path.join(__dirname, 'src/package-managers/mvn/bump-deps.ts'),
-      'package-managers/npm/bump-deps': path.join(__dirname, 'src/package-managers/npm/bump-deps.ts'),
-      'package-managers/npm/parser': path.join(__dirname, 'src/package-managers/npm/parser.ts'),
-      'package-managers/yarn/bump-deps': path.join(__dirname, 'src/package-managers/yarn/bump-deps.ts'),
-      'package-managers/yarn/parser': path.join(__dirname, 'src/package-managers/yarn/parser.ts'),
-      'package-managers/yarn3/bump-deps': path.join(__dirname, 'src/package-managers/yarn3/bump-deps.ts'),
-      'package-managers/yarn3/parser': path.join(__dirname, 'src/package-managers/yarn3/parser.ts'),
+      index: path.join(__dirname, 'src/library.ts'),
+      cli: path.join(__dirname, 'src/cli.ts'),
     },
     output: {
       filename: '[name].js',
@@ -59,7 +49,7 @@ module.exports = (env, argv) => {
       new webpack.BannerPlugin({
         banner: '#!/usr/bin/env node',
         raw: true,
-        include: /index\.js$/,
+        include: /cli\.js$/,
       }),
     ],
     target: 'node',

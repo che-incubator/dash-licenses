@@ -11,187 +11,122 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, statSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 import * as path from 'path';
 import { PackageManagerBase } from '../../helpers/package-manager-base';
 import { ChunkedDashLicensesProcessor } from '../../helpers/chunked-processor';
+import { parseYarnLockfile } from './yarn-lockfile';
+import { Yarn3DependencyProcessor } from './bump-deps';
+import type { Environment, Options } from '../../helpers/types';
 
 /**
  * Yarn 3+ package manager processor.
- * Handles dependency analysis for projects using Yarn Berry (v3+).
+ * Uses yarn.lock parsing for prod/dev separation—no yarn-plugin-licenses required.
  */
 export class Yarn3Processor extends PackageManagerBase {
-  constructor() {
-    super({
-      name: 'yarn3',
-      projectFile: 'package.json',
-      lockFile: 'yarn.lock',
-    });
+  constructor(env?: Environment, options?: Options) {
+    super(
+      {
+        name: 'yarn3',
+        projectFile: 'package.json',
+        lockFile: 'yarn.lock'
+      },
+      env,
+      options
+    );
   }
 
   /**
-   * Generate dependencies using Yarn 3+ specific tooling.
+   * Generate dependencies using lockfile parsing + ClearlyDefined.
+   * No plugin installation.
    */
   protected async generateDependencies(): Promise<void> {
-    // Generate dependencies info
-    console.log('Generating all dependencies info using yarn...');
-    const yarnDepsFile = path.join(this.env.TMP_DIR, 'yarn-deps.json');
-    try {
-      execSync(
-        `yarn info --name-only --all --recursive --dependents --json > "${yarnDepsFile}" 2>&1`,
-        { cwd: this.env.PROJECT_COPY_DIR }
-      );
+    const projectDir = this.env.PROJECT_COPY_DIR;
 
-      if (!existsSync(yarnDepsFile) || statSync(yarnDepsFile).size === 0) {
-        throw new Error('yarn-deps.json is empty');
+    // 1. yarn install (for node_modules - needed for license extraction in bump-deps)
+    console.log('Installing dependencies...');
+    try {
+      execSync('yarn install', {
+        cwd: projectDir,
+        stdio: this.options.debug ? 'inherit' : 'pipe',
+        maxBuffer: 50 * 1024 * 1024
+      });
+    } catch (error: unknown) {
+      const err = error as NodeJS.ErrnoException;
+      const hasNodeModules =
+        existsSync(path.join(projectDir, 'node_modules')) ||
+        existsSync(path.join(projectDir, '.yarn', 'cache'));
+      if (!hasNodeModules) {
+        console.error('Error during yarn install:', err.message);
+        if (this.options.debug) this.copyTmpDir();
+        process.exit(1);
       }
-    } catch {
-      console.error('Error: Failed to generate yarn-deps.json');
-      if (this.options.debug) {
-        this.copyTmpDir();
-      }
+    }
+    console.log('Done.');
+    console.log();
+
+    // 2. Parse yarn.lock + package.json for prod/dev separation
+    console.log('Parsing yarn.lock for prod/dev dependencies...');
+    let lockfileResult;
+    try {
+      lockfileResult = parseYarnLockfile(projectDir);
+    } catch (err) {
+      console.error('Error parsing lockfile:', (err as Error).message);
+      if (this.options.debug) this.copyTmpDir();
       process.exit(1);
     }
     console.log('Done.');
     console.log();
 
-    // Generate DEPENDENCIES file using chunked processing
-    console.log(`Generating a temporary DEPENDENCIES file (batch size: ${this.env.BATCH_SIZE})...`);
-    const parserScript = path.join(this.env.WORKSPACE_DIR, 'package-managers/yarn3/parser.js');
-    const depsFilePath = path.join(this.env.TMP_DIR, 'DEPENDENCIES');
+    // 3. Write dep lists for bump-deps (lockfile format)
+    const depsInfoPath = path.join(this.env.TMP_DIR, 'yarn3-deps-info.json');
+    writeFileSync(
+      depsInfoPath,
+      JSON.stringify({
+        dependencies: lockfileResult.prod,
+        devDependencies: lockfileResult.dev
+      }),
+      'utf8'
+    );
 
+    const allDepsFile = path.join(this.env.TMP_DIR, 'yarn-all-deps.txt');
+    writeFileSync(allDepsFile, lockfileResult.all.join('\n') + '\n', 'utf8');
+
+    // 4. Generate DEPENDENCIES via ChunkedProcessor (ClearlyDefined)
+    console.log(`Generating DEPENDENCIES file (batch size: ${this.env.BATCH_SIZE})...`);
+    const depsFilePath = path.join(this.env.TMP_DIR, 'DEPENDENCIES');
     try {
       const processor = new ChunkedDashLicensesProcessor({
-        parserScript,
-        parserInput: yarnDepsFile,
-        dashLicensesJar: this.env.DASH_LICENSES,
+        parserScript: 'cat',
+        parserInput: allDepsFile,
+        parserEnv: this.env as unknown as NodeJS.ProcessEnv,
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
-        debug: this.options.debug
-        // Uses default: maxRetries=9, retryDelayMs=3000
+        debug: this.options.debug,
+        enableHarvest: this.options.harvest
       });
-
       await processor.process();
     } catch (error: unknown) {
       const err = error as Error;
       console.error(`Error: Failed to generate DEPENDENCIES file: ${err.message}`);
-      console.error('This is usually caused by Eclipse Foundation or ClearlyDefined API issues (timeout, rate limit, etc.).');
-      if (this.options.debug) {
-        this.copyTmpDir();
-      }
-      process.exit(1);
-    }
-
-    // Check for yarn version and set to version 3 if needed
-    console.log('Checking for yarn version...');
-    try {
-      const yarnVersion = execSync('yarn -v', { encoding: 'utf-8' }).trim();
-      const majorVersion = parseInt(yarnVersion.split('.')[0], 10);
-
-      if (majorVersion !== 3) {
-        console.log('Installing yarn version 3...');
-        execSync('yarn set version 3.8.6', { cwd: this.env.PROJECT_COPY_DIR });
-      }
-    } catch {
-      console.error('Error checking yarn version');
-    }
-    console.log('Done.');
-    console.log();
-
-    // Import yarn plugin licenses (suppress verbose output)
-    console.log('Importing yarn plugin licenses...');
-    try {
-      execSync(
-        'yarn plugin import https://raw.githubusercontent.com/mhassan1/yarn-plugin-licenses/v0.7.0/bundles/@yarnpkg/plugin-licenses.js 2>/dev/null',
-        { cwd: this.env.PROJECT_COPY_DIR, stdio: this.options.debug ? 'inherit' : 'pipe' }
-      );
-    } catch {
-      // Plugin might already be installed, continue
-      if (this.options.debug) {
-        console.log('  Note: Plugin import returned error (may already be installed)');
-      }
-    }
-    console.log('Done.');
-    console.log();
-
-    // Install dependencies (suppress verbose cleanup messages)
-    console.log('Installing dependencies (this may take a while)...');
-    try {
-      // Use pipe to suppress YN0019 cleanup messages, but capture errors
-      execSync('yarn install 2>&1', {
-        cwd: this.env.PROJECT_COPY_DIR,
-        stdio: this.options.debug ? 'inherit' : 'pipe',
-        maxBuffer: 50 * 1024 * 1024 // 50MB buffer
-      });
-    } catch (error: unknown) {
-      const err = error as NodeJS.ErrnoException;
-      // Check if it's a buffer overflow error
-      if (err.code === 'ENOBUFS') {
-        console.error('Error: Output buffer overflow during yarn install.');
-        console.error('This usually happens with very large projects.');
-        console.error('The dependencies may have been installed successfully despite the error.');
-      } else {
-        // Yarn install might return non-zero for warnings, check if node_modules exists
-        const nodeModulesExists = existsSync(path.join(this.env.PROJECT_COPY_DIR, 'node_modules')) ||
-                                  existsSync(path.join(this.env.PROJECT_COPY_DIR, '.yarn', 'cache'));
-        if (!nodeModulesExists) {
-          console.error('Error during yarn install:', err.message || err);
-          if (this.options.debug) {
-            this.copyTmpDir();
-          }
-          process.exit(1);
-        }
-        // Dependencies installed despite warnings, continue
-        if (this.options.debug) {
-          console.log('  Note: yarn install completed with warnings');
-        }
-      }
-    }
-    console.log('Done.');
-    console.log();
-
-    // Generate all dependencies info with licenses
-    console.log('Generating all dependencies info using yarn...');
-    const depsInfoFile = path.join(this.env.TMP_DIR, 'yarn-deps-info.json');
-    try {
-      execSync(
-        `yarn licenses list -R --json > "${depsInfoFile}" 2>&1`,
-        { cwd: this.env.PROJECT_COPY_DIR }
-      );
-
-      if (!existsSync(depsInfoFile) || statSync(depsInfoFile).size === 0) {
-        throw new Error('yarn-deps-info.json is empty');
-      }
-    } catch {
-      console.error('Error: Failed to generate yarn-deps-info.json');
-      if (this.options.debug) {
-        this.copyTmpDir();
-      }
+      if (this.options.debug) this.copyTmpDir();
       process.exit(1);
     }
     console.log('Done.');
-    console.log();
+  }
 
-    // Generate list of production dependencies
-    console.log('Generating list of production dependencies using yarn...');
-    const prodDepsFile = path.join(this.env.TMP_DIR, 'yarn-prod-deps.json');
+  /**
+   * Override: Run bump-deps directly instead of via execSync
+   */
+  protected override async runBumpDeps(): Promise<number> {
+    console.log('Checking dependencies for restrictions to use...');
     try {
-      execSync(
-        `yarn licenses list -R --production --json > "${prodDepsFile}" 2>&1`,
-        { cwd: this.env.PROJECT_COPY_DIR }
-      );
-
-      if (!existsSync(prodDepsFile) || statSync(prodDepsFile).size === 0) {
-        throw new Error('yarn-prod-deps.json is empty');
-      }
-    } catch {
-      console.error('Error: Failed to generate yarn-prod-deps.json');
-      if (this.options.debug) {
-        this.copyTmpDir();
-      }
-      process.exit(1);
+      const processor = new Yarn3DependencyProcessor();
+      processor.process();
+      return 0;
+    } catch (error) {
+      // Error already logged by the processor
+      return 1;
     }
-    console.log('Done.');
-    console.log();
   }
 }

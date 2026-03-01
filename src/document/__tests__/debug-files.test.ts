@@ -93,13 +93,11 @@ describe('Debug Files Generation', () => {
       }
     });
 
-    it('should have yarn-deps.json for yarn3 projects', () => {
+    it('should have yarn3-deps-info.json for yarn3 projects', () => {
       if (fs.existsSync(depsTmpDir)) {
-        const yarn3DepsPath = path.join(depsTmpDir, 'yarn-deps.json');
-        
+        const yarn3DepsPath = path.join(depsTmpDir, 'yarn3-deps-info.json');
         if (fs.existsSync(yarn3DepsPath)) {
           const content = fs.readFileSync(yarn3DepsPath, 'utf8');
-          // Should be valid JSON
           expect(() => JSON.parse(content)).not.toThrow();
         }
       }
