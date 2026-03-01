@@ -14,12 +14,13 @@ import { execSync } from 'child_process';
 import { existsSync, statSync, unlinkSync, copyFileSync, mkdirSync } from 'fs';
 import * as path from 'path';
 import { Environment, Options, PackageManagerResult, parseEnvironment, parseOptions } from './types';
+import { FILE_NAMES, getErrorMessage } from './utils';
 
 /**
  * Configuration options for a package manager
  */
 export interface PackageManagerConfig {
-  /** Name of the package manager (e.g., 'npm', 'yarn', 'mvn') */
+  /** Name of the package manager (e.g., 'npm', 'yarn', 'yarn3') */
   name: string;
   /** The main project file to look for (e.g., 'package.json', 'pom.xml') */
   projectFile: string;
@@ -36,11 +37,18 @@ export abstract class PackageManagerBase {
   protected readonly env: Environment;
   protected readonly options: Options;
   protected readonly config: PackageManagerConfig;
+  /** When true (library mode), throw instead of process.exit */
+  private readonly libraryMode: boolean;
 
-  constructor(config: PackageManagerConfig) {
-    this.env = parseEnvironment();
-    this.options = parseOptions();
+  constructor(
+    config: PackageManagerConfig,
+    envOverride?: Environment,
+    optionsOverride?: Options
+  ) {
     this.config = config;
+    this.env = envOverride ? parseEnvironment(envOverride) : parseEnvironment();
+    this.options = optionsOverride ? parseOptions(optionsOverride) : parseOptions();
+    this.libraryMode = !!envOverride;
   }
 
   /**
@@ -48,37 +56,40 @@ export abstract class PackageManagerBase {
    */
   public async run(): Promise<void> {
     try {
-      // Validate project files exist
       this.validateProject();
 
-      // Change to project directory
       console.log(`Changing directory to ${this.env.PROJECT_COPY_DIR}...`);
       process.chdir(this.env.PROJECT_COPY_DIR);
       console.log('Done.');
       console.log();
 
-      // Generate dependencies (package-manager-specific)
       await this.generateDependencies();
-
-      // Verify DEPENDENCIES file was created
       this.verifyDependenciesFile();
-
-      // Check dependencies for restrictions and handle results
       const result = await this.checkRestrictions();
+
+      // Copy result files from TMP_DIR to DEPS_DIR (generate mode only)
+      if (!this.options.check) {
+        this.copyResultFiles(true);
+      }
+
       this.handleResults(result);
     } catch (error) {
-      console.error('Error:', error);
+      const msg = getErrorMessage(error);
+      const isDependencyCheckFailed = msg.includes('Dependency check failed (outdated or restricted)');
+      // In library mode, suppress this expected error from being printed
+      if (!(this.libraryMode && isDependencyCheckFailed)) {
+        console.error('Error:', error);
+      }
+      if (this.libraryMode) throw error;
       process.exit(1);
     }
   }
 
   /**
-   * Build the docker command info message for users
+   * Build the run command info message for users
    */
   protected buildInfoMsg(): string {
-    return `docker run \\
-    -v $(pwd):/workspace/project \\
-    quay.io/che-incubator/dash-licenses:next`;
+    return `npx dash-licenses`;
   }
 
   /**
@@ -103,7 +114,7 @@ export abstract class PackageManagerBase {
    * If permission denied, saves as filename(1).md and shows warning with fix instructions
    */
   protected copyResultFiles(force: boolean = false): void {
-    const files = ['prod.md', 'dev.md', 'problems.md'];
+    const files = [FILE_NAMES.PROD_MD, FILE_NAMES.DEV_MD, FILE_NAMES.PROBLEMS_MD];
     const permissionErrors: string[] = [];
 
     for (const file of files) {
@@ -115,8 +126,9 @@ export abstract class PackageManagerBase {
         if (this.options.debug) {
           console.log(`Copy ${file} to .deps...`);
         }
-        
-        if (this.options.debug || force) {
+
+        // Copy files when force=true (generate mode) or when in debug mode
+        if (force || this.options.debug) {
           try {
             copyFileSync(srcFile, destFile);
             if (this.options.debug) {
@@ -144,12 +156,12 @@ export abstract class PackageManagerBase {
             }
           }
         }
-      } else if (force && file !== 'problems.md') {
+      } else if (force && file !== FILE_NAMES.PROBLEMS_MD) {
         console.error(`Error: ${file} not generated in ${this.env.TMP_DIR}`);
         process.exit(1);
-      } else if (this.options.debug && file !== 'problems.md') {
+      } else if (this.options.debug && file !== FILE_NAMES.PROBLEMS_MD) {
         console.error(`Warning: ${file} not found in ${this.env.TMP_DIR}`);
-      } else if (file === 'problems.md' && existsSync(destFile) && !this.options.check) {
+      } else if (file === FILE_NAMES.PROBLEMS_MD && existsSync(destFile) && !this.options.check) {
         try {
           unlinkSync(destFile);
         } catch (error: unknown) {
@@ -239,7 +251,7 @@ export abstract class PackageManagerBase {
    * Override in subclasses that use different file names.
    */
   protected verifyDependenciesFile(): void {
-    const depsFilePath = path.join(this.env.TMP_DIR, 'DEPENDENCIES');
+    const depsFilePath = path.join(this.env.TMP_DIR, FILE_NAMES.DEPENDENCIES);
     
     if (!existsSync(depsFilePath)) {
       console.error('Error: DEPENDENCIES file was not created.');
@@ -268,7 +280,12 @@ export abstract class PackageManagerBase {
     const bumpDepsScript = path.join(this.env.WORKSPACE_DIR, `package-managers/${this.config.name}/bump-deps.js`);
     let restricted = 0;
     try {
-      execSync(`node ${bumpDepsScript} ${this.options.check ? '--check' : ''}`, { stdio: 'inherit' });
+      const childEnv = { ...process.env, ENCODING: 'utf8' };
+      Object.assign(childEnv, this.env);
+      execSync(`node ${bumpDepsScript} ${this.options.check ? '--check' : ''}`, {
+        stdio: 'inherit',
+        env: childEnv
+      });
     } catch (error: unknown) {
       restricted = this.getExitStatus(error);
     }
@@ -290,8 +307,8 @@ export abstract class PackageManagerBase {
     // Check for changes in production dependencies
     if (this.options.check) {
       console.log('Looking for changes in production dependencies list...');
-      const origProdFile = path.join(this.env.DEPS_DIR, 'prod.md');
-      const newProdFile = path.join(this.env.TMP_DIR, 'prod.md');
+      const origProdFile = path.join(this.env.DEPS_DIR, FILE_NAMES.PROD_MD);
+      const newProdFile = path.join(this.env.TMP_DIR, FILE_NAMES.PROD_MD);
       
       if (!existsSync(origProdFile)) {
         console.warn('  Warning: Original prod.md not found - dependencies not initialized yet.');
@@ -317,8 +334,8 @@ export abstract class PackageManagerBase {
     // Check for changes in development dependencies
     if (this.options.check) {
       console.log('Looking for changes in test- and development dependencies list...');
-      const origDevFile = path.join(this.env.DEPS_DIR, 'dev.md');
-      const newDevFile = path.join(this.env.TMP_DIR, 'dev.md');
+      const origDevFile = path.join(this.env.DEPS_DIR, FILE_NAMES.DEV_MD);
+      const newDevFile = path.join(this.env.TMP_DIR, FILE_NAMES.DEV_MD);
       
       if (!existsSync(origDevFile)) {
         console.warn('  Warning: Original dev.md not found - dependencies not initialized yet.');
@@ -382,8 +399,12 @@ export abstract class PackageManagerBase {
 
     if (!shouldFail) {
       console.log('All found licenses are approved to use.');
+      if (this.libraryMode) return;
       process.exit(0);
     } else {
+      if (this.libraryMode) {
+        throw new Error('Dependency check failed (outdated or restricted)');
+      }
       process.exit(1);
     }
   }

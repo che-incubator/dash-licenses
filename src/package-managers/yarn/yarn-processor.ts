@@ -12,20 +12,28 @@
 
 import { execSync } from 'child_process';
 import * as path from 'path';
+import { writeFileSync } from 'fs';
 import { PackageManagerBase } from '../../helpers/package-manager-base';
 import { ChunkedDashLicensesProcessor } from '../../helpers/chunked-processor';
+import { parseYarnDependencies } from './parser';
+import { YarnDependencyProcessor } from './bump-deps';
+import type { Environment, Options } from '../../helpers/types';
 
 /**
  * Yarn v1 package manager processor.
  * Handles dependency analysis for projects using Yarn Classic (v1).
  */
 export class YarnProcessor extends PackageManagerBase {
-  constructor() {
-    super({
-      name: 'yarn',
-      projectFile: 'package.json',
-      lockFile: 'yarn.lock',
-    });
+  constructor(env?: Environment, options?: Options) {
+    super(
+      {
+        name: 'yarn',
+        projectFile: 'package.json',
+        lockFile: 'yarn.lock'
+      },
+      env,
+      options
+    );
   }
 
   /**
@@ -42,20 +50,24 @@ export class YarnProcessor extends PackageManagerBase {
     console.log('Done.');
     console.log();
 
+    // Parse dependencies and write to temp file for chunked processor
+    const allDeps = parseYarnDependencies(this.env.TMP_DIR);
+    const allDepsFile = path.join(this.env.TMP_DIR, 'yarn-all-deps.txt');
+    writeFileSync(allDepsFile, allDeps.join('\n') + '\n', 'utf8');
+
     // Generate DEPENDENCIES file using chunked processing
     console.log(`Generating a temporary DEPENDENCIES file (batch size: ${this.env.BATCH_SIZE})...`);
-    const parserScript = path.join(this.env.WORKSPACE_DIR, 'package-managers/yarn/parser.js');
     const depsFilePath = path.join(this.env.TMP_DIR, 'DEPENDENCIES');
 
     try {
       const processor = new ChunkedDashLicensesProcessor({
-        parserScript,
-        parserInput: '', // yarn parser doesn't need input, reads from project
-        dashLicensesJar: this.env.DASH_LICENSES,
+        parserScript: 'cat',
+        parserInput: allDepsFile,
+        parserEnv: this.env as unknown as NodeJS.ProcessEnv,
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
-        debug: this.options.debug
-        // Uses default: maxRetries=9, retryDelayMs=3000
+        debug: this.options.debug,
+        enableHarvest: this.options.harvest
       });
 
       await processor.process();
@@ -81,12 +93,27 @@ export class YarnProcessor extends PackageManagerBase {
 
     // Generate list of all dependencies
     console.log('Generating list of all dependencies using yarn...');
-    const allDepsFile = path.join(this.env.TMP_DIR, 'yarn-all-deps.json');
+    const allDepsFile2 = path.join(this.env.TMP_DIR, 'yarn-all-deps.json');
     execSync(
-      `yarn list --ignore-engines --json --depth=0 --no-progress > ${allDepsFile}`,
+      `yarn list --ignore-engines --json --depth=0 --no-progress > ${allDepsFile2}`,
       { cwd: this.env.PROJECT_COPY_DIR }
     );
     console.log('Done.');
     console.log();
+  }
+
+  /**
+   * Override: Run bump-deps directly instead of via execSync
+   */
+  protected override async runBumpDeps(): Promise<number> {
+    console.log('Checking dependencies for restrictions to use...');
+    try {
+      const processor = new YarnDependencyProcessor();
+      processor.process();
+      return 0;
+    } catch (error) {
+      // Error already logged by the processor
+      return 1;
+    }
   }
 }

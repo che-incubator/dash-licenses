@@ -45,7 +45,7 @@ interface YarnLicenseTable {
 /**
  * Yarn v1 package manager bump dependencies implementation
  */
-class YarnDependencyProcessor {
+export class YarnDependencyProcessor {
   private readonly paths: FilePaths;
   private readonly allDependencies: LicenseMap;
 
@@ -126,11 +126,7 @@ class YarnDependencyProcessor {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error processing Yarn dependencies:', errorMessage);
-      process.exit(1);
+      throw error;
     }
   }
 }
-
-// Execute the processor
-const processor = new YarnDependencyProcessor();
-processor.process();

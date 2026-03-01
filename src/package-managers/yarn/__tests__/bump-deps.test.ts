@@ -96,10 +96,10 @@ describe('yarn/bump-deps.ts', () => {
     it('should handle errors gracefully', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/yarn/bump-deps.ts', 'utf8');
-      
+
       expect(content).toContain('catch (error)');
       expect(content).toContain('console.error');
-      expect(content).toContain('process.exit(1)');
+      expect(content).toContain('throw error');
     });
   });
 });

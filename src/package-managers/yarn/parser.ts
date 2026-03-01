@@ -21,20 +21,29 @@ interface YarnLicenseTable {
   };
 }
 
-const TMP_DIR: string = process.env.TMP_DIR || '';
-const YARN_DEPS_INFO: string = path.join(TMP_DIR, 'yarn-deps-info.json');
+/**
+ * Parse yarn dependencies info file and return list of package@version strings
+ */
+export function parseYarnDependencies(tmpDir: string = process.env.TMP_DIR || ''): string[] {
+  const dependencies: string[] = [];
+  const YARN_DEPS_INFO = path.join(tmpDir, 'yarn-deps-info.json');
 
-if (existsSync(YARN_DEPS_INFO)) {
-  // get all dependencies info
+  if (!existsSync(YARN_DEPS_INFO)) {
+    return dependencies;
+  }
+
   const allDependenciesInfoStr: string = readFileSync(YARN_DEPS_INFO).toString();
   const tableStartIndex: number = allDependenciesInfoStr.indexOf('{"type":"table"');
+
   if (tableStartIndex !== -1) {
     const licenses: YarnLicenseTable = JSON.parse(allDependenciesInfoStr.substring(tableStartIndex));
     const { head, body } = licenses.data;
     body.forEach((libInfo: string[]) => {
       const libName: string = libInfo[head.indexOf('Name')];
       const libVersion: string = libInfo[head.indexOf('Version')];
-      console.log(`${libName}@${libVersion}\n`);
+      dependencies.push(`${libName}@${libVersion}`);
     });
   }
+
+  return dependencies;
 }

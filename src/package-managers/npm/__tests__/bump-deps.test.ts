@@ -77,26 +77,26 @@ describe('npm/bump-deps.ts', () => {
     it('should handle error conditions', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/npm/bump-deps.ts', 'utf8');
-      
+
       expect(content).toContain('catch (error)');
       expect(content).toContain('console.error');
-      expect(content).toContain('process.exit(1)');
+      expect(content).toContain('throw error');
     });
 
     it('should handle problems logging', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/npm/bump-deps.ts', 'utf8');
-      
+
       expect(content).toContain('processAndGenerateDocuments');
       expect(content).toContain('NpmDependencyProcessor');
       expect(content).toContain('dependencies-info.json');
     });
 
-    it('should handle process exit conditions', () => {
+    it('should export NpmDependencyProcessor class', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/npm/bump-deps.ts', 'utf8');
-      
-      expect(content).toContain('process.exit');
+
+      expect(content).toContain('export class NpmDependencyProcessor');
       expect(content).toContain('processAndGenerateDocuments');
     });
 

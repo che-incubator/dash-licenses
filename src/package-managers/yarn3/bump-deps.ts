@@ -11,33 +11,21 @@
  */
 
 import * as path from 'path';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { PackageManagerUtils, type FilePaths } from '../../helpers/utils';
 import type { LicenseMap, LicenseInfo } from '../../document';
 
-/**
- * Interface for Yarn 3 dependency children structure
- */
-interface YarnDependencyChildren {
-  [key: string]: {
-    children: {
-      url?: string;
-    };
-  };
+interface LockfileDepsInfo {
+  dependencies?: string[];
+  devDependencies?: string[];
 }
 
 /**
- * Interface for Yarn 3 dependency line structure
+ * Yarn 3+ bump dependencies.
+ * Supports lockfile-based format (yarn3-deps-info.json) - no plugin required.
+ * Extracts license info from node_modules/package.json.
  */
-interface YarnDependencyLine {
-  value: string;
-  children: YarnDependencyChildren;
-}
-
-/**
- * Yarn 3+ package manager bump dependencies implementation
- */
-class Yarn3DependencyProcessor {
+export class Yarn3DependencyProcessor {
   private readonly paths: FilePaths;
   private readonly allDependencies: LicenseMap;
 
@@ -46,78 +34,46 @@ class Yarn3DependencyProcessor {
     this.allDependencies = new Map();
   }
 
-  /**
-   * Normalize Yarn 3 package key to standard format
-   */
-  private normalizePackageKey(key: string): string {
-    return key
-      .replace(/@npm:/g, '@')
-      .replace(/@virtual:.+#npm:/g, '@');
-  }
-
-  /**
-   * Extract dependencies from Yarn 3 dependency info
-   */
-  private extractDependencies(dependenciesInfo: string[]): string[] {
-    const deps: string[] = [];
-    dependenciesInfo.forEach((line: string) => {
-      const { children }: { children: YarnDependencyChildren } = JSON.parse(line);
-      const keys = Object.keys(children);
-      keys.filter(val => val.includes('@npm:') || val.includes('@virtual:')).forEach(key => {
-        deps.push(this.normalizePackageKey(key));
-      });
-    });
-    return deps;
-  }
-
-  /**
-   * Parse Yarn 3 license info and populate allDependencies map
-   */
-  private parseLicenseInfo(): void {
-    const depsInfoPath = path.join(this.paths.TMP_DIR, 'yarn-deps-info.json');
-    const allDependenciesInfo = readFileSync(depsInfoPath).toString().trim();
-
-    allDependenciesInfo.split('\n').forEach((line: string) => {
-      const { value, children }: YarnDependencyLine = JSON.parse(line);
-      const keys = Object.keys(children);
-      keys.filter(val => val.includes('@npm:') || val.includes('@virtual:')).forEach(key => {
-        const normalizedKey = this.normalizePackageKey(key);
-        const url = children[key]?.children?.url;
-        const licenseInfo: LicenseInfo = {
-          License: value
-        };
-        if (url) {
-          licenseInfo.URL = url;
+  private extractLicenseInfo(packageName: string): LicenseInfo {
+    const info: LicenseInfo = { License: '' };
+    try {
+      const atIdx = packageName.lastIndexOf('@');
+      if (atIdx <= 0) return info;
+      const name = packageName.substring(0, atIdx);
+      const pkgPath = path.join(process.env.PROJECT_COPY_DIR || '', 'node_modules', name, 'package.json');
+      if (existsSync(pkgPath)) {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+        if (pkg.license) {
+          info.License = typeof pkg.license === 'string' ? pkg.license : pkg.license.type || '';
         }
-        this.allDependencies.set(normalizedKey, licenseInfo);
-      });
-    });
+        if (pkg.homepage) info.URL = pkg.homepage;
+        else if (pkg.repository) {
+          const repo = typeof pkg.repository === 'string' ? pkg.repository : pkg.repository?.url || '';
+          if (repo) info.URL = repo.replace(/^git\+/, '').replace(/\.git$/, '');
+        }
+      }
+    } catch {
+      // Ignore per-package errors
+    }
+    return info;
   }
 
-  /**
-   * Process Yarn 3 dependencies
-   */
   public process(): void {
     try {
-      // Parse license information from yarn-deps-info.json
-      this.parseLicenseInfo();
+      const depsInfoPath = path.join(this.paths.TMP_DIR, 'yarn3-deps-info.json');
+      if (!existsSync(depsInfoPath)) {
+        throw new Error('yarn3-deps-info.json not found. Use lockfile-based Yarn 3 processor.');
+      }
 
-      // Read production dependencies
-      const prodDepsPath = path.join(this.paths.TMP_DIR, 'yarn-prod-deps.json');
-      const yarnProdDepsInfo = readFileSync(prodDepsPath).toString().trim().split('\n');
-      const prodDeps = this.extractDependencies(yarnProdDepsInfo);
+      const depsInfo: LockfileDepsInfo = JSON.parse(readFileSync(depsInfoPath, 'utf8'));
+      const prodDeps = depsInfo.dependencies ?? [];
+      const devDeps = depsInfo.devDependencies ?? [];
+      const allDeps = [...new Set([...prodDeps, ...devDeps])];
 
-      // Build list of all dependencies from allDependencies map
-      const allDeps: string[] = [];
-      this.allDependencies.forEach((_value: LicenseInfo, key: string) => {
-        allDeps.push(key);
+      allDeps.forEach(pkg => {
+        this.allDependencies.set(pkg, this.extractLicenseInfo(pkg));
       });
-      allDeps.sort();
 
-      // Build list of development dependencies (all - prod)
-      const devDeps = allDeps.filter(entry => !prodDeps.includes(entry));
-
-      // Process and generate documents using shared utility
       PackageManagerUtils.processAndGenerateDocuments(
         prodDeps,
         devDeps,
@@ -125,13 +81,9 @@ class Yarn3DependencyProcessor {
         this.paths
       );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Error processing Yarn 3 dependencies:', errorMessage);
-      process.exit(1);
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error processing Yarn 3 dependencies:', msg);
+      throw error;
     }
   }
 }
-
-// Execute the processor
-const processor = new Yarn3DependencyProcessor();
-processor.process();
