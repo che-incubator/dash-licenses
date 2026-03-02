@@ -90,7 +90,7 @@ describe('Library E2E Tests', () => {
     expect(fs.existsSync(path.join(depsDir, 'prod.md'))).toBe(true);
     expect(fs.existsSync(path.join(depsDir, 'dev.md'))).toBe(true);
     expect(fs.existsSync(path.join(depsDir, 'tmp'))).toBe(false);
-  }, 60000);
+  }, 120000); // Increased timeout for real API calls
 
   test('should keep .deps/tmp when debug is true', async () => {
     const result = await generate({
@@ -105,5 +105,5 @@ describe('Library E2E Tests', () => {
     expect(fs.existsSync(path.join(depsDir, 'prod.md'))).toBe(true);
     expect(fs.existsSync(tmpDir)).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, 'DEPENDENCIES'))).toBe(true);
-  }, 60000);
+  }, 120000); // Increased timeout for real API calls
 });
