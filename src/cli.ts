@@ -11,7 +11,7 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-import { generate } from './library';
+import { generate, type LibraryConfig } from './library';
 
 function parseArgs(): {
   projectPath: string;
@@ -65,12 +65,15 @@ Examples:
     }
   }
 
-  return { projectPath, batchSize, check, debug, harvest, jarPath };
+  return jarPath
+    ? { projectPath, batchSize, check, debug, harvest, jarPath }
+    : { projectPath, batchSize, check, debug, harvest };
 }
 
 async function main(): Promise<void> {
-  const { projectPath, batchSize, check, debug, harvest, jarPath } = parseArgs();
-  const result = await generate({ projectPath, batchSize, check, debug, harvest, jarPath });
+  const args = parseArgs();
+  const config: LibraryConfig = args;
+  const result = await generate(config);
   if (result.exitCode !== 0 && result.error) {
     console.error(result.error);
   }
