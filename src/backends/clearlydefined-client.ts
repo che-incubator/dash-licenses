@@ -195,10 +195,9 @@ export async function requestHarvest(
 ): Promise<boolean> {
   const url = `${CLEARLYDEFINED_API}/harvest`;
 
-  // Request harvest for both package and source
+  // Request harvest using ClearlyDefined API format (coordinates only)
   const harvestRequests = [
     {
-      tool: 'package',
       coordinates: clearlyDefinedId
     }
   ];

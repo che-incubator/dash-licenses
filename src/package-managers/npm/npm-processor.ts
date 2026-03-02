@@ -17,6 +17,7 @@ import { ChunkedDashLicensesProcessor } from '../../helpers/chunked-processor';
 import { parseNpmDependencies } from './parser';
 import { NpmDependencyProcessor } from './bump-deps';
 import type { Environment, Options } from '../../helpers/types';
+import { environmentToProcessEnv } from '../../helpers/types';
 
 /**
  * NPM package manager processor.
@@ -63,7 +64,7 @@ export class NpmProcessor extends PackageManagerBase {
       const processor = new ChunkedDashLicensesProcessor({
         parserScript: 'cat',
         parserInput: allDepsFile,
-        parserEnv: this.env as unknown as NodeJS.ProcessEnv,
+        parserEnv: environmentToProcessEnv(this.env),
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
         debug: this.options.debug,

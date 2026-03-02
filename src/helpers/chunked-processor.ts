@@ -216,27 +216,28 @@ export class ChunkedDashLicensesProcessor {
 
         throw new Error('Output file not created or empty');
 
-      } catch (error: any) {
+      } catch (error: unknown) {
         const isLastAttempt = attempt === this.maxRetries;
 
         // dash-licenses uses various non-zero exit codes to indicate issues
         // (1, 2, 3, 9, etc. for unresolved/restricted/unmapped dependencies)
         // As long as the output file was created with content, treat it as success
-        if (error.status && error.status > 0 && error.status < 128) {
-          logger.debug(`  ⚠ dash-licenses exit code ${error.status}`);
+        const errorStatus = (error && typeof error === 'object' && 'status' in error) ? (error as { status: number }).status : undefined;
+        if (errorStatus && errorStatus > 0 && errorStatus < 128) {
+          logger.debug(`  ⚠ dash-licenses exit code ${errorStatus}`);
           // Check if we got results (output file exists with content)
           if (existsSync(outputFile)) {
             const content = readFileSync(outputFile, 'utf8');
             if (content.length > 0) {
               const lineCount = parseNonEmptyLines(content).length;
-              logger.debug(`  ✓ Completed with ${lineCount} entries (exit ${error.status}: some items need review)`);
+              logger.debug(`  ✓ Completed with ${lineCount} entries (exit ${errorStatus}: some items need review)`);
               return true;
             }
           }
         }
 
         // Check for specific error codes
-        const errorMsg = error.message || '';
+        const errorMsg = error instanceof Error ? error.message : String(error);
         const isTimeoutError = errorMsg.includes('524') || errorMsg.includes('timeout');
         const isRateLimitError = errorMsg.includes('429');
         const isGatewayError = errorMsg.includes('502') || errorMsg.includes('bad gateway');
@@ -269,7 +270,7 @@ export class ChunkedDashLicensesProcessor {
    * Process a single chunk using the configured backend (JAR or ClearlyDefined HTTP).
    */
   private async processChunk(chunk: string[], outputFile: string): Promise<void> {
-    const lines = await this.backend.processBatch(chunk, outputFile);
+    const lines = await this.backend.processBatch(chunk);
     writeFileSync(outputFile, lines.join('\n') + (lines.length ? '\n' : ''), 'utf8');
   }
 
@@ -289,8 +290,9 @@ export class ChunkedDashLicensesProcessor {
           lines.forEach(line => allEntries.add(line));
 
           logger.debug(`  Merged ${lines.length} entries from ${tempFile}`);
-        } catch (error: any) {
-          logger.warn(`  Could not read ${tempFile}: ${error.message}`);
+        } catch (error: unknown) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          logger.warn(`  Could not read ${tempFile}: ${errorMsg}`);
         }
       }
     }
@@ -318,8 +320,9 @@ export class ChunkedDashLicensesProcessor {
         try {
           unlinkSync(tempFile);
           deleted++;
-        } catch (error: any) {
-          logger.warn(`Could not delete temp file ${tempFile}: ${error.message}`);
+        } catch (error: unknown) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          logger.warn(`Could not delete temp file ${tempFile}: ${errorMsg}`);
         }
       }
     }

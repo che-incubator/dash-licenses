@@ -18,6 +18,7 @@ import { ChunkedDashLicensesProcessor } from '../../helpers/chunked-processor';
 import { parseYarnLockfile } from './yarn-lockfile';
 import { Yarn3DependencyProcessor } from './bump-deps';
 import type { Environment, Options } from '../../helpers/types';
+import { environmentToProcessEnv } from '../../helpers/types';
 
 /**
  * Yarn 3+ package manager processor.
@@ -99,7 +100,7 @@ export class Yarn3Processor extends PackageManagerBase {
       const processor = new ChunkedDashLicensesProcessor({
         parserScript: 'cat',
         parserInput: allDepsFile,
-        parserEnv: this.env as unknown as NodeJS.ProcessEnv,
+        parserEnv: environmentToProcessEnv(this.env),
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
         debug: this.options.debug,

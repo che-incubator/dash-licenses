@@ -11,6 +11,24 @@
  */
 
 /**
+ * License information for a dependency
+ */
+export interface LicenseInfo {
+  License: string;
+  URL?: string;
+}
+
+/**
+ * Type for dependency maps (dependency identifier -> CQ reference)
+ */
+export type DependencyMap = Map<string, string>;
+
+/**
+ * Type for license maps (dependency identifier -> license information)
+ */
+export type LicenseMap = Map<string, LicenseInfo>;
+
+/**
  * Environment configuration for package managers
  */
 export interface Environment {
@@ -72,4 +90,21 @@ export function parseOptions(overrides?: Partial<Options>): Options {
     harvest: process.argv.includes('--harvest'),
   };
   return overrides ? { ...opts, ...overrides } : opts;
+}
+
+/**
+ * Convert Environment to NodeJS.ProcessEnv for child processes.
+ * This creates a proper ProcessEnv object without type casting.
+ */
+export function environmentToProcessEnv(env: Environment): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    BATCH_SIZE: env.BATCH_SIZE,
+    PROJECT_COPY_DIR: env.PROJECT_COPY_DIR,
+    TMP_DIR: env.TMP_DIR,
+    DEPS_DIR: env.DEPS_DIR,
+    DEPS_COPY_DIR: env.DEPS_COPY_DIR,
+    WORKSPACE_DIR: env.WORKSPACE_DIR,
+    DASH_LICENSES: env.DASH_LICENSES
+  };
 }

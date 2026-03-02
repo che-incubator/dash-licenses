@@ -10,16 +10,10 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-export interface LicenseInfo {
-  License: string;
-  URL?: string;
-}
+import type { LicenseInfo, DependencyMap, LicenseMap } from '../helpers/types';
 
-/**
- * Type for dependency maps
- */
-export type DependencyMap = Map<string, string>;
-export type LicenseMap = Map<string, LicenseInfo>;
+// Re-export shared types to maintain backward compatibility
+export type { LicenseInfo, DependencyMap, LicenseMap };
 
 /**
  * Logger class to manage logs and track unresolved dependencies

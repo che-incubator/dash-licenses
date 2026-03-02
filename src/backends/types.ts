@@ -25,5 +25,5 @@ export interface DepResult {
 /** Backend that resolves licenses for dependency identifiers */
 export interface LicenseBackend {
   /** Process a batch of dependencies and return results in DEPENDENCIES format (one line per dependency) */
-  processBatch(deps: string[], outputFile?: string): Promise<string[]>;
+  processBatch(deps: string[]): Promise<string[]>;
 }

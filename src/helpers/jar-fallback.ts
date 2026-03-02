@@ -10,10 +10,10 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as path from 'path';
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
-import type { DependencyMap } from '../document';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import type { DependencyMap } from './types';
 import { logger } from './logger';
 
 /** Parse DEPENDENCIES line to identifier (pkg@version) and approvedBy, or null if not approved */
@@ -103,24 +103,25 @@ export function runJarFallback(
   };
 
   const jarInputLines = unresolvedDeps.map(convertToClearlyDefinedId);
-  const jarInputFile = path.join(jarDir, 'JAR_INPUT.tmp');
+  const jarInput = jarInputLines.join('\n') + '\n';
 
   logger.info(`Running Eclipse dash-licenses JAR for ${unresolvedDeps.length} unresolved dependencies...`);
 
   try {
-    // Write unresolved dependencies to temp input file
-    writeFileSync(jarInputFile, jarInputLines.join('\n') + '\n', 'utf8');
-
-    logger.debug(`JAR input file: ${jarInputFile}`);
+    logger.debug(`JAR path: ${jarPath}`);
     logger.debug(`JAR output file: ${jarOutputPath}`);
 
-    // Pipe input to JAR (same pattern as jar-backend.ts)
-    execSync(
-      `cat "${jarInputFile}" | java -jar "${path.resolve(jarPath)}" -summary "${jarOutputPath}" -`,
+    // Execute JAR with input via stdin (prevents command injection)
+    // Use execFileSync with argument array instead of shell string
+    const resolvedJarPath = path.resolve(jarPath);
+    execFileSync(
+      'java',
+      ['-jar', resolvedJarPath, '-summary', jarOutputPath, '-'],
       {
         cwd: projectPath,
         encoding: 'utf8',
-        stdio: 'pipe'
+        input: jarInput,
+        stdio: ['pipe', 'pipe', 'pipe']
       }
     );
 
@@ -131,16 +132,7 @@ export function runJarFallback(
       'JAR fallback: Eclipse dash-licenses JAR failed. Ensure Java is installed and JAR is valid.'
     );
     logger.debug((error as Error).message);
-    // Clean up temp input file
-    if (existsSync(jarInputFile)) {
-      try { unlinkSync(jarInputFile); } catch { /* ignore */ }
-    }
     return new Map();
-  } finally {
-    // Clean up temp input file
-    if (existsSync(jarInputFile)) {
-      try { unlinkSync(jarInputFile); } catch { /* ignore */ }
-    }
   }
 
   if (!existsSync(jarOutputPath)) {

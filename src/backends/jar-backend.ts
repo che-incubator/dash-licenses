@@ -25,8 +25,8 @@ export class JarBackend implements LicenseBackend {
     private readonly debug?: boolean
   ) {}
 
-  async processBatch(deps: string[], outputFile?: string): Promise<string[]> {
-    const outPath = outputFile || `out-${process.pid}-${Date.now()}.tmp`;
+  async processBatch(deps: string[]): Promise<string[]> {
+    const outPath = `jar-out-${process.pid}-${Date.now()}.tmp`;
     const tempInputFile = `${outPath}.input.tmp`;
     try {
       writeFileSync(tempInputFile, deps.join('\n') + '\n', 'utf8');
@@ -45,7 +45,7 @@ export class JarBackend implements LicenseBackend {
       return [];
     } finally {
       if (existsSync(tempInputFile)) try { unlinkSync(tempInputFile); } catch { /* ignore */ }
-      if (!outputFile && existsSync(outPath)) try { unlinkSync(outPath); } catch { /* ignore */ }
+      if (existsSync(outPath)) try { unlinkSync(outPath); } catch { /* ignore */ }
     }
   }
 }
