@@ -46,7 +46,7 @@ export class ClearlyDefinedBackend implements LicenseBackend {
     this.enableHarvest = options?.enableHarvest ?? false; // Default: harvest disabled
   }
 
-  async processBatch(deps: string[], _outputFile?: string): Promise<string[]> {
+  async processBatch(deps: string[]): Promise<string[]> {
     const startTime = Date.now();
     const results: DepResult[] = [];
     const idMap = new Map<string, string>(); // clearlyDefinedId -> original input (for dedup)
@@ -222,10 +222,15 @@ export class ClearlyDefinedBackend implements LicenseBackend {
       logger.warn(`Batch POST failed: ${error}`);
       logger.info(`Falling back to individual GET requests for ${coordinates.length} coordinates`);
 
-      // Fallback: retry each coordinate individually using GET
-      const fallbackResults = await Promise.all(
-        coordinates.map(id => this.fetchOne(id))
-      );
+      // Fallback: retry each coordinate individually using GET with concurrency limit
+      const fallbackResults: DepResult[] = [];
+      for (let i = 0; i < coordinates.length; i += GET_CONCURRENCY) {
+        const batch = coordinates.slice(i, i + GET_CONCURRENCY);
+        const batchResults = await Promise.all(
+          batch.map(id => this.fetchOne(id))
+        );
+        fallbackResults.push(...batchResults);
+      }
 
       return fallbackResults;
     }
@@ -316,6 +321,7 @@ export class ClearlyDefinedBackend implements LicenseBackend {
   /**
    * Check and request harvest for dependencies that were not found.
    * Only processes dependencies with source 'notfound' or 'error'.
+   * Uses batched concurrency to avoid overwhelming the API.
    */
   private async processHarvest(results: DepResult[]): Promise<void> {
     const notfound = results.filter(r => r.source === 'notfound' || r.source === 'error');
@@ -329,28 +335,45 @@ export class ClearlyDefinedBackend implements LicenseBackend {
     let harvestRequested = 0;
     let harvestFailed = 0;
 
-    for (const dep of notfound) {
-      try {
-        // Check if already harvested
-        const harvested = await checkHarvested(dep.id, this.timeoutMs);
+    // Process harvest requests with controlled concurrency (same as GET_CONCURRENCY)
+    const HARVEST_CONCURRENCY = GET_CONCURRENCY;
 
-        if (harvested.length > 0) {
-          alreadyHarvested++;
-          logger.debug(`${dep.id}: already harvested (${harvested.length} tools)`);
-          continue;
-        }
+    for (let i = 0; i < notfound.length; i += HARVEST_CONCURRENCY) {
+      const batch = notfound.slice(i, i + HARVEST_CONCURRENCY);
 
-        // Request harvest
-        logger.info(`${dep.id}: requesting harvest...`);
-        await requestHarvest(dep.id, this.timeoutMs);
-        harvestRequested++;
+      const batchResults = await Promise.all(
+        batch.map(async (dep) => {
+          try {
+            // Check if already harvested
+            const harvested = await checkHarvested(dep.id, this.timeoutMs);
 
-        // Small delay to avoid overwhelming the API
-        await sleep(100);
-      } catch (error) {
-        harvestFailed++;
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.debug(`${dep.id}: harvest request failed - ${errorMessage}`);
+            if (harvested.length > 0) {
+              logger.debug(`${dep.id}: already harvested (${harvested.length} tools)`);
+              return { status: 'already-harvested' };
+            }
+
+            // Request harvest
+            logger.info(`${dep.id}: requesting harvest...`);
+            await requestHarvest(dep.id, this.timeoutMs);
+            return { status: 'requested' };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.debug(`${dep.id}: harvest request failed - ${errorMessage}`);
+            return { status: 'failed' };
+          }
+        })
+      );
+
+      // Aggregate results from this batch
+      for (const result of batchResults) {
+        if (result.status === 'already-harvested') alreadyHarvested++;
+        else if (result.status === 'requested') harvestRequested++;
+        else if (result.status === 'failed') harvestFailed++;
+      }
+
+      // Small delay between batches to avoid overwhelming the API
+      if (i + HARVEST_CONCURRENCY < notfound.length) {
+        await sleep(GET_BATCH_DELAY_MS);
       }
     }
 
