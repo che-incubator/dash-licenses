@@ -52,41 +52,39 @@ const RESTRICTED_PATTERNS = [
 
 /**
  * Check if a license expression (SPDX) is approved.
- * Handles AND, OR, WITH expressions - all components must be acceptable.
+ *
+ * OR: approved if ANY alternative is approved (consumer can choose).
+ * AND: approved only if ALL components are approved.
+ * Parentheses are stripped before evaluation.
  */
 export function isLicenseApproved(expression: string): boolean {
   if (!expression || expression.trim() === 'NOASSERTION') {
     return false;
   }
 
-  // Split by AND/OR - for approval, we require no restricted components
-  const parts = expression
-    .split(/\s+(?:AND|OR)\s+/i)
-    .map(p => p.replace(/\s*\([^)]*\)\s*/, '').trim());
+  const cleaned = expression.replace(/[()]/g, '').trim();
 
-  for (const part of parts) {
-    // Handle "X WITH Classpath-exception-2.0" - LGPL with exception is often OK
-    const [base, _with] = part.split(/\s+WITH\s+/i);
-    const licenseId = base?.trim() || part;
-
-    if (RESTRICTED_PATTERNS.some(re => re.test(licenseId))) {
-      // GPL with Classpath-exception is commonly approved
-      if (/_with_classpath_exception|classpath-exception/i.test(part)) {
-        continue;
-      }
-      return false;
-    }
-
-    if (!APPROVED_LICENSE_IDS.has(licenseId) && !isApprovedCompound(licenseId)) {
-      // Unknown license - treat as restricted (needs review)
-      return false;
-    }
-  }
-
-  return true;
+  // Split top-level OR alternatives — approved if any branch is approved
+  const orBranches = cleaned.split(/\s+OR\s+/i).map(s => s.trim());
+  return orBranches.some(branch => isAndGroupApproved(branch));
 }
 
-function isApprovedCompound(licenseId: string): boolean {
-  // Allow compound like "Apache-2.0 AND MIT" - each part checked above
-  return /\s+(?:AND|OR)\s+/i.test(licenseId);
+/** All AND-joined license IDs must be individually approved. */
+function isAndGroupApproved(branch: string): boolean {
+  const parts = branch.split(/\s+AND\s+/i).map(s => s.trim());
+  return parts.every(part => isSingleLicenseApproved(part));
+}
+
+function isSingleLicenseApproved(part: string): boolean {
+  const [base] = part.split(/\s+WITH\s+/i);
+  const licenseId = base?.trim() || part;
+
+  if (RESTRICTED_PATTERNS.some(re => re.test(licenseId))) {
+    if (/classpath-exception/i.test(part)) {
+      return true;
+    }
+    return false;
+  }
+
+  return APPROVED_LICENSE_IDS.has(licenseId);
 }

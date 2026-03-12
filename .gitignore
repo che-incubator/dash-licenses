@@ -28,7 +28,6 @@ Thumbs.db
 *.log
 
 # Build artifacts
-dist/
 *.tsbuildinfo
 
 # TypeScript compiled outputs

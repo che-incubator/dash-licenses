@@ -47,7 +47,8 @@
     "header:check": "node header-check.js",
     "header:fix": "node header-check.js --fix",
     "header:verbose": "node header-check.js --verbose",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "prepack": "webpack --mode production && chmod +x dist/cli.js"
   },
   "dependencies": {
     "@yarnpkg/parsers": "^3.0.3",
