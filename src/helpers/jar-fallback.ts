@@ -111,8 +111,6 @@ export function runJarFallback(
     logger.debug(`JAR path: ${jarPath}`);
     logger.debug(`JAR output file: ${jarOutputPath}`);
 
-    // Execute JAR with input via stdin (prevents command injection)
-    // Use execFileSync with argument array instead of shell string
     const resolvedJarPath = path.resolve(jarPath);
     execFileSync(
       'java',
@@ -121,18 +119,27 @@ export function runJarFallback(
         cwd: projectPath,
         encoding: 'utf8',
         input: jarInput,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 120_000,
+        maxBuffer: 10 * 1024 * 1024
       }
     );
 
     const duration = Date.now() - startTime;
     logger.duration('JAR execution', duration);
   } catch (error) {
-    logger.warn(
-      'JAR fallback: Eclipse dash-licenses JAR failed. Ensure Java is installed and JAR is valid.'
-    );
-    logger.debug((error as Error).message);
-    return new Map();
+    const duration = Date.now() - startTime;
+    logger.duration('JAR execution', duration);
+    // JAR exits non-zero when some deps are unresolved, but still writes output
+    if (existsSync(jarOutputPath)) {
+      logger.info('JAR exited with errors but produced output, parsing results...');
+    } else {
+      logger.warn(
+        'JAR fallback: Eclipse dash-licenses JAR failed. Ensure Java is installed and JAR is valid.'
+      );
+      logger.debug((error as Error).message);
+      return new Map();
+    }
   }
 
   if (!existsSync(jarOutputPath)) {

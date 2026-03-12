@@ -2,6 +2,7 @@
 
 | Packages | License | Resolved CQs |
 | --- | --- | --- |
+| `@eslint/eslintrc@3.3.4` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/@eslint/eslintrc/3.3.4) |
 | `@yarnpkg/parsers@3.0.3` | BSD-2-Clause | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/@yarnpkg/parsers/3.0.3) |
 | `axios@1.13.5` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/axios/1.13.5) |
 | `chalk@4.1.2` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/chalk/4.1.2) |
