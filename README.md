@@ -9,9 +9,9 @@ Node.js library for dependency license analysis of **npm and Yarn** projects. Us
 - **SPDX-based license policy**: Approves MIT, Apache-2.0, BSD, ISC, EPL-2.0, etc.
 - **Use as library or CLI**: Programmatic API and `npx license-tool` command
 
-## Important: Not Eclipse IP Compliant
+## Eclipse IP Compliance
 
-This implementation uses the **ClearlyDefined** HTTP API only. It does **not** query the Eclipse Foundation IP database. For full Eclipse IP Team compliance (CQ status, IPLab integration), use the Eclipse dash-licenses JAR.
+By default, this tool uses the **ClearlyDefined** HTTP API as its primary license data source. For full Eclipse IP Team compliance (CQ status, IPLab integration), use the `--jar` option to enable fallback to the official [Eclipse Dash License Tool](https://github.com/eclipse-dash/dash-licenses) JAR, which queries the Eclipse Foundation's internal IP database.
 
 ## Supported Package Managers
 
@@ -177,8 +177,7 @@ npm run lint
 
 ## Risks and Limitations
 
-- **Different policy than Eclipse projects**: May miss restricted content
-- **ClearlyDefined coverage**: Unresolved packages marked `restricted`
+- **ClearlyDefined coverage**: Newly published packages may not be indexed yet; use `--jar` or `--harvest` to resolve them
 - **Approval rules**: Maintain `src/backends/license-policy.ts` per [Eclipse licenses](https://www.eclipse.org/legal/licenses/) if desired
 
 ## Related Projects
