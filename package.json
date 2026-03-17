@@ -1,5 +1,5 @@
 {
-  "name": "license-tool",
+  "name": "@eclipse-che/license-tool",
   "version": "2.0.0",
   "description": "Node.js library for dependency license analysis using ClearlyDefined API",
   "main": "dist/index.js",
@@ -7,6 +7,13 @@
   "bin": {
     "license-tool": "dist/cli.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/che-incubator/dash-licenses.git"
@@ -48,7 +55,8 @@
     "header:fix": "node header-check.js --fix",
     "header:verbose": "node header-check.js --verbose",
     "type-check": "tsc --noEmit",
-    "prepack": "webpack --mode production && chmod +x dist/cli.js"
+    "prepack": "webpack --mode production && chmod +x dist/cli.js",
+    "publish:next": "npm version 0.0.1-$(date +%s) --no-git-tag-version && npm publish --registry=https://registry.npmjs.org/ --tag next --access public"
   },
   "dependencies": {
     "@eslint/eslintrc": "3.3.4",
