@@ -1,0 +1,72 @@
+#
+# Copyright (c) 2022-2026 Red Hat, Inc.
+# This program and the accompanying materials are made
+# available under the terms of the Eclipse Public License 2.0
+# which is available at https://www.eclipse.org/legal/epl-2.0/
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+
+name: Release @eclipse-che/license-tool
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'release version in format x.y.z'
+        required: true
+      forceRecreateTags:
+        description: If true, tags will be recreated. Use with caution
+        required: false
+        default: 'false'
+
+jobs:
+  build:
+    name: Create @eclipse-che/license-tool Release
+    runs-on: ubuntu-22.04
+    steps:
+      - name: "Checkout source code"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@eclipse-che'
+      - name: Set up environment
+        run: |
+          sudo apt-get update -y || true
+          sudo apt-get -y -q install hub
+          hub --version
+      - name: Check existing tags
+        run: |
+          set +e
+          RECREATE_TAGS=${{ github.event.inputs.forceRecreateTags }}
+          VERSION=${{ github.event.inputs.version }}
+          EXISTING_TAG=$(git ls-remote --exit-code origin refs/tags/${VERSION})
+          if [[ -n ${EXISTING_TAG} ]]; then
+            if [[ ${RECREATE_TAGS} == "true" ]]; then
+              echo "[INFO] Removing tag for ${VERSION} version. New tag will be recreated during release."
+              git push origin :$VERSION
+            else
+              echo "[ERROR] Cannot proceed with release - tag ${EXISTING_TAG} already exists."
+              exit 1
+            fi
+          else
+            echo "[INFO] No existing tags detected for $VERSION"
+          fi
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-
+      - name: Run make-release.sh script
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.LICENSE_TOOL_RELEASE_GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "Oleksii Orel"
+          git config --global user.email "oorel@redhat.com"
+
+          ./make-release.sh --version ${{ github.event.inputs.version }}
