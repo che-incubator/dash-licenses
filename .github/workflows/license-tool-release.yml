@@ -20,6 +20,11 @@ on:
         required: false
         default: 'false'
 
+permissions:
+  id-token: write  # Required for publishing to npmjs
+  contents: read
+
+
 jobs:
   build:
     name: Create @eclipse-che/license-tool Release
