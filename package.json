@@ -1,5 +1,5 @@
 {
-  "name": "license-tool",
+  "name": "@eclipse-che/license-tool",
   "version": "2.0.0",
   "description": "Node.js library for dependency license analysis using ClearlyDefined API",
   "main": "dist/index.js",

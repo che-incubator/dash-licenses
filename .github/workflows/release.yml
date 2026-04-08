@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2021-2025 Red Hat, Inc.
+# Copyright (c) 2021-2026 Red Hat, Inc.
 # This program and the accompanying materials are made
 # available under the terms of the Eclipse Public License 2.0
 # which is available at https://www.eclipse.org/legal/epl-2.0/
@@ -9,11 +9,18 @@
 name: Release
 
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'The version that is going to be released. Should be in format 1.y.z'
+        required: true
+        default: '2.y.z'
+
+permissions:
+  id-token: write  # Required for publishing to npmjs
+  contents: read
 
 jobs:
-
   build-and-test:
     runs-on: ubuntu-22.04
     steps:
@@ -25,12 +32,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-      -
-        name: "Install dependencies"
-        run: npm ci
-      -
-        name: "Build"
-        run: npm run build
-      -
-        name: "Run tests"
-        run: npm run test:unit
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: "Release: publish to npmjs"
+        run: ./make-release.sh ${{ github.event.inputs.version }}
