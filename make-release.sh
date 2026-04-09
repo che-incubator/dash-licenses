@@ -32,9 +32,9 @@ init() {
   while [[ "$#" -gt 0 ]]; do
     case $1 in
       '-v'|'--version') VERSION="$2"; shift 1;;
-      '--no-push') NO_PUSH=1; shift 0;;
-      '--skip-publish') SKIP_PUBLISH=1; shift 0;;
-      '--skip-bump-version') SKIP_NEXT_VERSION_BUMP=1; shift 0;;
+      '--no-push') NO_PUSH=1;;
+      '--skip-publish') SKIP_PUBLISH=1;;
+      '--skip-bump-version') SKIP_NEXT_VERSION_BUMP=1;;
       '--help'|'-h') usage;;
     esac
     shift 1
@@ -42,7 +42,12 @@ init() {
 
   [[ -z ${VERSION} ]] && { echo "[ERROR] Release version is not defined"; usage; }
 
-  X_BRANCH=$(echo "${VERSION}" | sed 's/.$/x/')
+  if [[ ! ${VERSION} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "[ERROR] Invalid version '${VERSION}'. Expected format: x.y.z"
+    exit 1
+  fi
+
+  X_BRANCH="${VERSION%?}x"
   NEXT_BRANCH="pr-main-to-${VERSION}-next"
   NEXT_VERSION="${VERSION}-next"
 

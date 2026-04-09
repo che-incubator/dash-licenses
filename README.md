@@ -42,7 +42,7 @@ yarn add @eclipse-che/license-tool
 This library is available on npm.
 
 You can find the published package here: \
-__npm:__ [@eclipse-che/license-tool](https://www.npmjs.com/package/@eclipse-che/license-tool)
+**npm:** [@eclipse-che/license-tool](https://www.npmjs.com/package/@eclipse-che/license-tool)
 
 ## Quick Start
 
@@ -91,7 +91,7 @@ The `--jar` option enables fallback to the official Eclipse Dash License Tool fo
 
 **Download**:
 ```sh
-# Download the latest stable dash-licenses JAR (1.1.0)
+# Download dash-licenses JAR (1.1.0)
 curl -Lo dash-licenses.jar https://repo.eclipse.org/repository/dash-maven2/org/eclipse/dash/org.eclipse.dash.licenses/1.1.0/org.eclipse.dash.licenses-1.1.0.jar
 ```
 
@@ -179,7 +179,7 @@ Returns `Promise<{ exitCode: 0 | 1; error?: string }>`.
 
 ## Project Structure
 
-```
+```text
 @eclipse-che/license-tool/
 ├── src/
 │   ├── library.ts           # Main library API

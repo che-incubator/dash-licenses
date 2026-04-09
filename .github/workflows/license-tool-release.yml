@@ -44,7 +44,9 @@ jobs:
         run: |
           RECREATE_TAGS="${{ github.event.inputs.forceRecreateTags }}"
           VERSION="${{ github.event.inputs.version }}"
-          if git ls-remote --exit-code origin "refs/tags/${VERSION}" >/dev/null 2>&1; then
+          git ls-remote --exit-code origin "refs/tags/${VERSION}" >/dev/null 2>&1
+          TAG_RC=$?
+          if [[ ${TAG_RC} -eq 0 ]]; then
             if [[ "${RECREATE_TAGS}" == "true" ]]; then
               echo "[INFO] Removing tag for ${VERSION} version. New tag will be recreated during release."
               git tag -d "${VERSION}" 2>/dev/null || true
@@ -53,8 +55,11 @@ jobs:
               echo "[ERROR] Cannot proceed with release - tag ${VERSION} already exists."
               exit 1
             fi
-          else
+          elif [[ ${TAG_RC} -eq 2 ]]; then
             echo "[INFO] No existing tags detected for ${VERSION}"
+          else
+            echo "[ERROR] Failed to verify remote tags for ${VERSION} (exit code: ${TAG_RC})"
+            exit 1
           fi
       - uses: actions/cache@v4
         with:
