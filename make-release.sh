@@ -66,7 +66,7 @@ resetChanges() {
 checkoutToXBranch() {
   echo "[INFO] Check out to ${X_BRANCH} branch."
 
-  if [[ $(git ls-remote -q --heads | grep -c "${X_BRANCH}") == 1 ]]; then
+  if git ls-remote --exit-code --heads origin "refs/heads/${X_BRANCH}" >/dev/null 2>&1; then
     echo "[INFO] ${X_BRANCH} exists."
     resetChanges "${X_BRANCH}"
   else
@@ -85,7 +85,7 @@ checkoutToXBranch() {
 checkoutToNextBranch() {
   echo "[INFO] Check out to ${NEXT_BRANCH} branch."
 
-  if [[ $(git ls-remote -q --heads | grep -c "${NEXT_BRANCH}") == 1 ]]; then
+  if git ls-remote --exit-code --heads origin "refs/heads/${NEXT_BRANCH}" >/dev/null 2>&1; then
     echo "[INFO] ${NEXT_BRANCH} exists."
     resetChanges "${NEXT_BRANCH}"
   else
@@ -93,10 +93,11 @@ checkoutToNextBranch() {
     resetChanges "main"
     if [[ ${NO_PUSH} -eq 0 ]]; then
       git push origin main:"${NEXT_BRANCH}"
+      git checkout "${NEXT_BRANCH}"
     else
       echo "[INFO] Skipping pushing branch ${NEXT_BRANCH} step"
+      git checkout -b "${NEXT_BRANCH}"
     fi
-    git checkout "${NEXT_BRANCH}"
   fi
 }
 
@@ -129,7 +130,13 @@ createPR() {
   local message=$3
 
   echo "[INFO] Create PR with base = ${base} and head = ${branch}"
-  hub pull-request --base "${base}" --head "${branch}" -m "${message}"
+
+  existing_pr=$(gh pr list --base "${base}" --head "${branch}" --state open --json number --jq '.[0].number')
+  if [[ -n "${existing_pr}" ]]; then
+    echo "[INFO] PR #${existing_pr} already exists for ${branch} -> ${base}, skipping creation."
+  else
+    gh pr create --base "${base}" --head "${branch}" --title "${message}" --body ""
+  fi
 }
 
 updatePackageVersionAndCommitChanges() {
