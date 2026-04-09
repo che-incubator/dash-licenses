@@ -13,13 +13,14 @@
 
 set -e
 
-usage ()
-{   echo "Usage: ./make-release.sh -v <version>"
+usage() {
+    local exit_code="${1:-0}"
+    echo "Usage: ./make-release.sh -v <version>"
     echo "optional parameters:"
     echo "--no-push - no pushes to remote repository"
     echo "--skip-publish - no publishing to npmjs repository"
     echo "--skip-bump-version - no updating of the next version after release"
-    exit
+    exit "${exit_code}"
 }
 
 init() {
@@ -35,12 +36,13 @@ init() {
       '--no-push') NO_PUSH=1;;
       '--skip-publish') SKIP_PUBLISH=1;;
       '--skip-bump-version') SKIP_NEXT_VERSION_BUMP=1;;
-      '--help'|'-h') usage;;
+      '--help'|'-h') usage 0;;
+      *) echo "[ERROR] Unknown argument: $1"; usage 1;;
     esac
     shift 1
   done
 
-  [[ -z ${VERSION} ]] && { echo "[ERROR] Release version is not defined"; usage; }
+  [[ -z ${VERSION} ]] && { echo "[ERROR] Release version is not defined"; usage 1; }
 
   if [[ ! ${VERSION} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "[ERROR] Invalid version '${VERSION}'. Expected format: x.y.z"
@@ -157,10 +159,9 @@ updatePackageVersionAndCommitChanges() {
   else
     echo "[INFO] Setting ${version} in package.json"
 
-    jq --arg version "${version}" '.version |= $version' package.json > package.json.update
-    mv -f package.json.update package.json
+    npm version "${version}" --no-git-tag-version
 
-    git add package.json
+    git add package.json package-lock.json
     git commit -s -m "${message}"
     if [[ ${NO_PUSH} -eq 0 ]]; then
         git push origin "${branch}"
@@ -180,8 +181,8 @@ updateXBranch() {
     "${X_BRANCH}" \
     "${COMMIT_MSG}"
 
-  publishArtifacts
   tagRelease
+  publishArtifacts
 }
 
 updateMainBranch() {
@@ -194,10 +195,14 @@ updateMainBranch() {
     "${NEXT_BRANCH}" \
     "${COMMIT_MSG}"
 
-  createPR \
-    "main" \
-    "${NEXT_BRANCH}" \
-    "${COMMIT_MSG}"
+  if [[ ${NO_PUSH} -eq 0 ]]; then
+    createPR \
+      "main" \
+      "${NEXT_BRANCH}" \
+      "${COMMIT_MSG}"
+  else
+    echo "[INFO] Skipping PR creation step"
+  fi
 }
 
 run() {
