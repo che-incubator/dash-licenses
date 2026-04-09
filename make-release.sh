@@ -115,7 +115,6 @@ publishArtifacts() {
   npm run build
 
   if [[ ${SKIP_PUBLISH} -eq 0 ]]; then
-    echo "[INFO] Publishing @eclipse-che/license-tool ${VERSION} artifacts"
     npm publish --tag latest --access public
   else
     echo "[INFO] Skipping publishing step"
@@ -138,7 +137,7 @@ createPR() {
 
   echo "[INFO] Create PR with base = ${base} and head = ${branch}"
 
-  existing_pr=$(gh pr list --base "${base}" --head "${branch}" --state open --json number --jq '.[0].number')
+  existing_pr=$(gh pr list --base "${base}" --head "${branch}" --state open --json number --jq '.[0].number' 2>/dev/null || true)
   if [[ -n "${existing_pr}" ]]; then
     echo "[INFO] PR #${existing_pr} already exists for ${branch} -> ${base}, skipping creation."
   else
@@ -151,8 +150,7 @@ updatePackageVersionAndCommitChanges() {
   local branch=$2
   local message=$3
 
-  local current_version=0
-
+  local current_version
   current_version=$(npm pkg get version)
   if [[ "$current_version" == "\"$version\"" ]]; then
     echo "[INFO] version is already specified in the package.json, skipping edits"
