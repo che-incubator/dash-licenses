@@ -212,7 +212,6 @@ npm run lint
 | `npm run lint` | Run ESLint |
 | `npm run header:check` | Check license headers |
 | `npm run type-check` | TypeScript type check (no emit) |
-| `npm run publish:next` | Publish a timestamped next-tagged version to npm |
 
 ## Risks and Limitations
 

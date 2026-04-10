@@ -55,8 +55,7 @@
     "header:fix": "node header-check.js --fix",
     "header:verbose": "node header-check.js --verbose",
     "type-check": "tsc --noEmit",
-    "prepack": "webpack --mode production && chmod +x dist/cli.js",
-    "publish:next": "npm version 0.0.1-$(date +%s) --no-git-tag-version && npm publish --registry=https://registry.npmjs.org/ --tag next --access public"
+    "prepack": "webpack --mode production && chmod +x dist/cli.js"
   },
   "dependencies": {
     "@eslint/eslintrc": "3.3.4",
