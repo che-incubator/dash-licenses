@@ -1,5 +1,5 @@
 {
-  "name": "license-tool",
+  "name": "@eclipse-che/license-tool",
   "version": "2.0.0",
   "description": "Node.js library for dependency license analysis using ClearlyDefined API",
   "main": "dist/index.js",
@@ -7,6 +7,13 @@
   "bin": {
     "license-tool": "dist/cli.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/che-incubator/dash-licenses.git"
