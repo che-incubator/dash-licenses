@@ -45,8 +45,8 @@ jobs:
           set -e
           RECREATE_TAGS="${{ github.event.inputs.forceRecreateTags }}"
           VERSION="${{ github.event.inputs.version }}"
-          git ls-remote --exit-code origin "refs/tags/${VERSION}" >/dev/null 2>&1
-          TAG_RC=$?
+          TAG_RC=0
+          git ls-remote --exit-code origin "refs/tags/${VERSION}" >/dev/null 2>&1 || TAG_RC=$?
           if [[ ${TAG_RC} -eq 0 ]]; then
             if [[ "${RECREATE_TAGS}" == "true" ]]; then
               echo "[INFO] Removing tag for ${VERSION} version. New tag will be recreated during release."
