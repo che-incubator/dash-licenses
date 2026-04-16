@@ -42,6 +42,7 @@ jobs:
           scope: '@eclipse-che'
       - name: Check existing tags
         run: |
+          set -e
           RECREATE_TAGS="${{ github.event.inputs.forceRecreateTags }}"
           VERSION="${{ github.event.inputs.version }}"
           git ls-remote --exit-code origin "refs/tags/${VERSION}" >/dev/null 2>&1
