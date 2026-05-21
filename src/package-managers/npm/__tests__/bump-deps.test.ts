@@ -67,7 +67,7 @@ describe('npm/bump-deps.ts', () => {
       const fs = require('fs');
       const content = fs.readFileSync('src/package-managers/npm/bump-deps.ts', 'utf8');
       
-      expect(content).toContain('process():');
+      expect(content).toContain('public process(');
       expect(content).toContain('dependencies-info.json');
       expect(content).toContain('readFileSync');
     });

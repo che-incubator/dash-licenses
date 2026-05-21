@@ -110,7 +110,7 @@ export class YarnProcessor extends PackageManagerBase {
     console.log('Checking dependencies for restrictions to use...');
     try {
       const processor = new YarnDependencyProcessor();
-      processor.process();
+      processor.process({ harvest: this.options.harvest, check: this.options.check });
       return 0;
     } catch (error) {
       // Error already logged by the processor
