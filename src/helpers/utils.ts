@@ -311,6 +311,7 @@ export class PackageManagerUtils {
       parseDependenciesFile(dependenciesStr, depsToCQ, allDependencies, unusedExcludes);
 
       // Auto-remove UNUSED Excludes from EXCLUDED files
+      // Case 1: redundant — approved by ClearlyDefined AND listed in EXCLUDED
       if (unusedExcludes.length > 0) {
         const toRemoveFromProd = unusedExcludes.filter(id => excludedProdIds.has(id));
         const toRemoveFromDev = unusedExcludes.filter(id => excludedDevIds.has(id));
@@ -322,6 +323,20 @@ export class PackageManagerUtils {
           this.removeUnusedExcludes(paths.EXCLUDED_DEV_MD, new Set(toRemoveFromDev), paths.ENCODING);
           logger.info(`Removed ${toRemoveFromDev.length} unused exclude(s) from EXCLUDED/dev.md`);
         }
+      }
+
+      // Case 2: orphan — listed in EXCLUDED but no longer present in the lock file
+      // (package removed or version bumped; the old identifier is stale)
+      const allCurrentDeps = new Set([...prodDeps, ...devDeps]);
+      const orphanFromProd = [...excludedProdIds].filter(id => !allCurrentDeps.has(id));
+      const orphanFromDev = [...excludedDevIds].filter(id => !allCurrentDeps.has(id));
+      if (orphanFromProd.length > 0) {
+        this.removeUnusedExcludes(paths.EXCLUDED_PROD_MD, new Set(orphanFromProd), paths.ENCODING);
+        logger.info(`Removed ${orphanFromProd.length} orphan exclude(s) from EXCLUDED/prod.md: ${orphanFromProd.join(', ')}`);
+      }
+      if (orphanFromDev.length > 0) {
+        this.removeUnusedExcludes(paths.EXCLUDED_DEV_MD, new Set(orphanFromDev), paths.ENCODING);
+        logger.info(`Removed ${orphanFromDev.length} orphan exclude(s) from EXCLUDED/dev.md: ${orphanFromDev.join(', ')}`);
       }
 
       // JAR fallback: if jarPath is set and we have unresolved deps, run Eclipse JAR and add approved to EXCLUDED
