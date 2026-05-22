@@ -200,7 +200,7 @@ export class PackageManagerUtils {
       if (m && identifiersToRemove.has(m[1])) continue;
       kept.push(line);
     }
-    writeFileSync(excludedPath, kept.join('\n') + (kept.length ? '\n' : ''), { encoding: encoding as BufferEncoding });
+    writeFileSync(excludedPath, kept.join('\n').trimEnd() + '\n', { encoding: encoding as BufferEncoding });
   }
 
   /**
