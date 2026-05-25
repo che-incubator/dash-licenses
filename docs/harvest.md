@@ -99,7 +99,7 @@ A dependency is considered **transitive** if it does not appear in any `package.
 
 **Example output:**
 
-```
+```text
 Note: 2 UNRESOLVED transitive dep(s) found. Run with --harvest to automatically add them to .deps/EXCLUDED.
   .deps/EXCLUDED should be updated with the next transitive deps:
     - agent-base@6.0.2
@@ -108,7 +108,7 @@ Note: 2 UNRESOLVED transitive dep(s) found. Run with --harvest to automatically 
 
 After running with `--harvest`:
 
-```
+```text
 .deps/EXCLUDED/prod.md:
 | `agent-base@6.0.2` | transitive dependency |
 | `jsbn@0.1.1`       | transitive dependency |

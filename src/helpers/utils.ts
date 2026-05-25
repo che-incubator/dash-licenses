@@ -424,13 +424,19 @@ export class PackageManagerUtils {
         return at > 0 ? id.substring(0, at) : id;
       };
 
+      // A package is "direct" if it appears in prod OR dev dependencies of any
+      // package.json in the project. Both sets must be checked for each dep
+      // regardless of which bucket (prod/dev) the dep was resolved into.
+      const isDirectPackage = (id: string): boolean => {
+        const name = getPackageName(id);
+        return directDeps.prod.has(name) || directDeps.dev.has(name);
+      };
+
       const stillUnresolvedProd = prodDeps.filter(d => !depsToCQ.has(d));
-      const transitiveProd = stillUnresolvedProd.filter(d => !directDeps.prod.has(getPackageName(d)));
+      const transitiveProd = stillUnresolvedProd.filter(d => !isDirectPackage(d));
 
       const stillUnresolvedDev = devDeps.filter(d => !depsToCQ.has(d));
-      const transitiveDev = stillUnresolvedDev.filter(
-        d => !directDeps.dev.has(getPackageName(d)) && !directDeps.prod.has(getPackageName(d))
-      );
+      const transitiveDev = stillUnresolvedDev.filter(d => !isDirectPackage(d));
 
       const allTransitive = [...transitiveProd, ...transitiveDev];
       if (allTransitive.length > 0) {
