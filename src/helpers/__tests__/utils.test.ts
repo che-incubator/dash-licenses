@@ -10,6 +10,9 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { PackageManagerUtils, type FilePaths } from '../utils';
 import type { DependencyMap } from '../../document';
 
@@ -213,6 +216,85 @@ describe('PackageManagerUtils Integration Tests', () => {
       expect(() => {
         PackageManagerUtils.createPackageIdentifier('package', null as any);
       }).toThrow('Both name and version must be provided');
+    });
+  });
+
+  describe('getDirectPackageNames', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-licenses-test-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    const writeJson = (filePath: string, data: object) => {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify(data));
+    };
+
+    test('returns empty sets when package.json is absent', () => {
+      const result = PackageManagerUtils.getDirectPackageNames(tmpDir);
+      expect(result.prod.size).toBe(0);
+      expect(result.dev.size).toBe(0);
+    });
+
+    test('reads direct deps from root package.json', () => {
+      writeJson(path.join(tmpDir, 'package.json'), {
+        dependencies: { axios: '^1.0.0', lodash: '^4.0.0' },
+        devDependencies: { jest: '^29.0.0' },
+      });
+      const { prod, dev } = PackageManagerUtils.getDirectPackageNames(tmpDir);
+      expect(prod.has('axios')).toBe(true);
+      expect(prod.has('lodash')).toBe(true);
+      expect(dev.has('jest')).toBe(true);
+    });
+
+    test('scans workspace packages in monorepo (array workspaces field)', () => {
+      writeJson(path.join(tmpDir, 'package.json'), {
+        workspaces: ['packages/*'],
+        dependencies: { shared: '^1.0.0' },
+      });
+      writeJson(path.join(tmpDir, 'packages', 'backend', 'package.json'), {
+        dependencies: { 'workspace-dep-a': '^1.0.0' },
+        devDependencies: { 'workspace-dev-dep': '^2.0.0' },
+      });
+      writeJson(path.join(tmpDir, 'packages', 'frontend', 'package.json'), {
+        dependencies: { 'workspace-dep-b': '^3.0.0' },
+      });
+
+      const { prod, dev } = PackageManagerUtils.getDirectPackageNames(tmpDir);
+      // Root dep
+      expect(prod.has('shared')).toBe(true);
+      // Workspace deps
+      expect(prod.has('workspace-dep-a')).toBe(true);
+      expect(prod.has('workspace-dep-b')).toBe(true);
+      expect(dev.has('workspace-dev-dep')).toBe(true);
+      // A transitive dep not in any package.json should be absent
+      expect(prod.has('jsbn')).toBe(false);
+    });
+
+    test('scans workspace packages with yarn workspaces.packages field', () => {
+      writeJson(path.join(tmpDir, 'package.json'), {
+        workspaces: { packages: ['packages/*'] },
+      });
+      writeJson(path.join(tmpDir, 'packages', 'lib', 'package.json'), {
+        dependencies: { 'lib-dep': '^1.0.0' },
+      });
+
+      const { prod } = PackageManagerUtils.getDirectPackageNames(tmpDir);
+      expect(prod.has('lib-dep')).toBe(true);
+    });
+
+    test('a package in root package.json is direct; one only in node_modules is transitive', () => {
+      writeJson(path.join(tmpDir, 'package.json'), {
+        dependencies: { axios: '^1.0.0' },
+      });
+      const { prod } = PackageManagerUtils.getDirectPackageNames(tmpDir);
+      expect(prod.has('axios')).toBe(true);   // direct
+      expect(prod.has('follow-redirects')).toBe(false); // transitive dep of axios
     });
   });
 

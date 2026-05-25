@@ -11,7 +11,7 @@
  */
 
 import * as path from 'path';
-import { writeFileSync, existsSync, readFileSync, unlinkSync, mkdirSync } from 'fs';
+import { writeFileSync, existsSync, readFileSync, unlinkSync, mkdirSync, readdirSync, statSync } from 'fs';
 import {
   getLogs,
   getUnresolvedNumber,
@@ -204,22 +204,67 @@ export class PackageManagerUtils {
   }
 
   /**
-   * Read root package.json and return sets of direct dependency names (without versions).
+   * Read package.json files for the project root and all workspace packages,
+   * returning the union of direct dependency names (without versions).
+   *
+   * A dependency is "direct" if it is listed in dependencies or devDependencies
+   * of ANY package.json in the project — root or workspace. This correctly
+   * handles monorepos where individual workspace packages declare their own
+   * deps that are not repeated in the root package.json.
+   *
    * @param projectPath - Path to the project root
    * @returns Sets of production and development direct dependency names
    */
   public static getDirectPackageNames(projectPath: string): { prod: Set<string>; dev: Set<string> } {
     const prod = new Set<string>();
     const dev = new Set<string>();
-    const packageJsonPath = path.join(projectPath, 'package.json');
-    if (!existsSync(packageJsonPath)) return { prod, dev };
+
+    const collectFromPackageJson = (pkgJsonPath: string): void => {
+      if (!existsSync(pkgJsonPath)) return;
+      try {
+        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, { encoding: 'utf8' }));
+        if (pkgJson.dependencies) Object.keys(pkgJson.dependencies).forEach(n => prod.add(n));
+        if (pkgJson.devDependencies) Object.keys(pkgJson.devDependencies).forEach(n => dev.add(n));
+      } catch {
+        // silently ignore parse errors
+      }
+    };
+
+    const rootPkgJsonPath = path.join(projectPath, 'package.json');
+    collectFromPackageJson(rootPkgJsonPath);
+
+    // Also scan workspace package.json files (monorepo support).
+    // Resolve workspace glob patterns from the root package.json workspaces field.
     try {
-      const pkgJson = JSON.parse(readFileSync(packageJsonPath, { encoding: 'utf8' }));
-      if (pkgJson.dependencies) Object.keys(pkgJson.dependencies).forEach(n => prod.add(n));
-      if (pkgJson.devDependencies) Object.keys(pkgJson.devDependencies).forEach(n => dev.add(n));
+      const rootPkgJson = JSON.parse(readFileSync(rootPkgJsonPath, { encoding: 'utf8' }));
+      const workspacePatterns: string[] = Array.isArray(rootPkgJson.workspaces)
+        ? rootPkgJson.workspaces
+        : Array.isArray(rootPkgJson.workspaces?.packages)
+          ? rootPkgJson.workspaces.packages
+          : [];
+
+      for (const pattern of workspacePatterns) {
+        // Support simple glob patterns like "packages/*" or "packages/foo"
+        const parts = pattern.split('/');
+        const parentDir = path.join(projectPath, ...parts.slice(0, -1));
+        const leaf = parts[parts.length - 1];
+
+        if (!existsSync(parentDir)) continue;
+
+        const candidates = leaf === '*'
+          ? readdirSync(parentDir).map(name => path.join(parentDir, name))
+          : [path.join(parentDir, leaf)];
+
+        for (const candidate of candidates) {
+          if (existsSync(candidate) && statSync(candidate).isDirectory()) {
+            collectFromPackageJson(path.join(candidate, 'package.json'));
+          }
+        }
+      }
     } catch {
-      // silently ignore parse errors
+      // silently ignore — workspace scanning is best-effort
     }
+
     return { prod, dev };
   }
 
