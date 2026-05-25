@@ -4,10 +4,12 @@
 | --- | --- | --- |
 | `@eslint/eslintrc@3.3.4` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/@eslint/eslintrc/3.3.4) |
 | `@yarnpkg/parsers@3.0.3` | BSD-2-Clause | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/@yarnpkg/parsers/3.0.3) |
-| `axios@1.13.5` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/axios/1.13.5) |
+| `agent-base@6.0.2` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/agent-base/6.0.2) |
+| `axios@1.16.1` |  | #28196 |
 | `chalk@4.1.2` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/chalk/4.1.2) |
-| `follow-redirects@1.15.11` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/follow-redirects/1.15.11) |
+| `follow-redirects@1.16.0` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/follow-redirects/1.16.0) |
+| `https-proxy-agent@5.0.1` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/https-proxy-agent/5.0.1) |
 | `js-yaml@3.14.2` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/js-yaml/3.14.2) |
 | `loglevel@1.9.2` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/loglevel/1.9.2) |
-| `proxy-from-env@1.1.0` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/proxy-from-env/1.1.0) |
+| `proxy-from-env@2.1.0` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/proxy-from-env/2.1.0) |
 | `tslib@2.8.1` | 0BSD | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/tslib/2.8.1) |
