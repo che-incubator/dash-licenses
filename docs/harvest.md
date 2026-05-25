@@ -85,6 +85,37 @@ When `--harvest` is enabled, you'll see output like:
 [19:48:02] [SUCCESS] Harvest summary: 1 already harvested, 2 newly requested
 ```
 
+## Transitive Dependencies and --harvest
+
+When `--harvest` is enabled, the tool also handles **transitive unresolved dependencies** automatically — without sending a harvest request to ClearlyDefined for them.
+
+A dependency is considered **transitive** if it does not appear in any `package.json` of the project (root or workspace packages). Such deps are brought in by other packages; the project owner is not responsible for obtaining a CQ for them.
+
+**What happens to transitive unresolved deps in `--harvest` mode:**
+
+1. They are **not** sent to ClearlyDefined for harvesting (no harvest API call is made)
+2. They are **appended** to `.deps/EXCLUDED/dev.md` or `.deps/EXCLUDED/prod.md` with the value `transitive dependency`
+3. On the next run, they appear as resolved and are never written to `problems.md`
+
+**Example output:**
+
+```
+Note: 2 UNRESOLVED transitive dep(s) found. Run with --harvest to automatically add them to .deps/EXCLUDED.
+  .deps/EXCLUDED should be updated with the next transitive deps:
+    - agent-base@6.0.2
+    - jsbn@0.1.1
+```
+
+After running with `--harvest`:
+
+```
+.deps/EXCLUDED/prod.md:
+| `agent-base@6.0.2` | transitive dependency |
+| `jsbn@0.1.1`       | transitive dependency |
+```
+
+**Direct unresolved deps** are unaffected — they still fail the build and are sent to ClearlyDefined for harvest as before.
+
 ## Best Practices
 
 1. **Run harvest on first encounter**: When you see unresolved dependencies in `problems.md`, run with `--harvest` to request harvesting

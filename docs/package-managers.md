@@ -222,7 +222,11 @@ export class NpmDependencyProcessor {
       // Get all dependency information from DEPENDENCIES file
       const allDependencies: LicenseMap = new Map();
 
-      // Generate documents using shared utility
+      // Generate documents using shared utility.
+      // processAndGenerateDocuments() calls getDirectPackageNames() which scans
+      // ALL package.json files in the project (root + every workspace package)
+      // to build the complete set of direct deps. Any still-unresolved dep not
+      // in that set is classified as transitive and suppressed from problems.md.
       PackageManagerUtils.processAndGenerateDocuments(
         allDeps.dependencies,      // prod dependencies
         allDeps.devDependencies,   // dev dependencies
