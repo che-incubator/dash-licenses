@@ -11,7 +11,7 @@
  */
 
 import * as path from 'path';
-import { writeFileSync, existsSync, readFileSync, unlinkSync } from 'fs';
+import { writeFileSync, existsSync, readFileSync, unlinkSync, mkdirSync, readdirSync, statSync } from 'fs';
 import {
   getLogs,
   getUnresolvedNumber,
@@ -91,6 +91,15 @@ export function parseNonEmptyLines(content: string): string[] {
  */
 export function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Options controlling transitive dependency handling in processAndGenerateDocuments.
+ * Falls back to process.argv detection if not provided (CLI mode).
+ */
+export interface ProcessingOptions {
+  harvest?: boolean;
+  check?: boolean;
 }
 
 /**
@@ -191,7 +200,108 @@ export class PackageManagerUtils {
       if (m && identifiersToRemove.has(m[1])) continue;
       kept.push(line);
     }
-    writeFileSync(excludedPath, kept.join('\n') + (kept.length ? '\n' : ''), { encoding: encoding as BufferEncoding });
+    writeFileSync(excludedPath, kept.join('\n').trimEnd() + '\n', { encoding: encoding as BufferEncoding });
+  }
+
+  /**
+   * Read package.json files for the project root and all workspace packages,
+   * returning the union of direct dependency names (without versions).
+   *
+   * A dependency is "direct" if it is listed in dependencies or devDependencies
+   * of ANY package.json in the project — root or workspace. This correctly
+   * handles monorepos where individual workspace packages declare their own
+   * deps that are not repeated in the root package.json.
+   *
+   * @param projectPath - Path to the project root
+   * @returns Sets of production and development direct dependency names
+   */
+  public static getDirectPackageNames(projectPath: string): { prod: Set<string>; dev: Set<string> } {
+    const prod = new Set<string>();
+    const dev = new Set<string>();
+
+    const collectFromPackageJson = (pkgJsonPath: string): void => {
+      if (!existsSync(pkgJsonPath)) return;
+      try {
+        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, { encoding: 'utf8' }));
+        if (pkgJson.dependencies) Object.keys(pkgJson.dependencies).forEach(n => prod.add(n));
+        if (pkgJson.devDependencies) Object.keys(pkgJson.devDependencies).forEach(n => dev.add(n));
+      } catch {
+        // silently ignore parse errors
+      }
+    };
+
+    const rootPkgJsonPath = path.join(projectPath, 'package.json');
+    collectFromPackageJson(rootPkgJsonPath);
+
+    // Also scan workspace package.json files (monorepo support).
+    // Resolve workspace glob patterns from the root package.json workspaces field.
+    try {
+      const rootPkgJson = JSON.parse(readFileSync(rootPkgJsonPath, { encoding: 'utf8' }));
+      const workspacePatterns: string[] = Array.isArray(rootPkgJson.workspaces)
+        ? rootPkgJson.workspaces
+        : Array.isArray(rootPkgJson.workspaces?.packages)
+          ? rootPkgJson.workspaces.packages
+          : [];
+
+      for (const pattern of workspacePatterns) {
+        // Support simple glob patterns like "packages/*" or "packages/foo"
+        const parts = pattern.split('/');
+        const parentDir = path.join(projectPath, ...parts.slice(0, -1));
+        const leaf = parts[parts.length - 1];
+
+        if (!existsSync(parentDir)) continue;
+
+        const candidates = leaf === '*'
+          ? readdirSync(parentDir).map(name => path.join(parentDir, name))
+          : [path.join(parentDir, leaf)];
+
+        for (const candidate of candidates) {
+          if (existsSync(candidate) && statSync(candidate).isDirectory()) {
+            collectFromPackageJson(path.join(candidate, 'package.json'));
+          }
+        }
+      }
+    } catch {
+      // silently ignore — workspace scanning is best-effort
+    }
+
+    return { prod, dev };
+  }
+
+  /**
+   * Append transitive dependency entries to an EXCLUDED markdown file.
+   * Creates the file with a default header if it does not exist.
+   * Skips identifiers already present in the file.
+   * @param excludedFilePath - Path to the EXCLUDED markdown file
+   * @param identifiers - Package identifiers to append (name@version format)
+   * @param encoding - File encoding
+   */
+  public static appendTransitiveExcludes(
+    excludedFilePath: string,
+    identifiers: string[],
+    encoding: string
+  ): void {
+    if (identifiers.length === 0) return;
+    if (!existsSync(excludedFilePath)) {
+      mkdirSync(path.dirname(excludedFilePath), { recursive: true });
+      writeFileSync(
+        excludedFilePath,
+        'This file lists dependencies that do not need CQs or auto-detection does not work.\n\n| Packages | Resolved CQs |\n| --- | --- |\n',
+        { encoding: encoding as BufferEncoding }
+      );
+    }
+    const content = readFileSync(excludedFilePath, { encoding: encoding as BufferEncoding });
+    const toAdd: string[] = [];
+    for (const id of identifiers) {
+      if (!content.includes(`\`${id}\``)) {
+        toAdd.push(`| \`${id}\` | transitive dependency |`);
+      }
+    }
+    if (toAdd.length > 0) {
+      const newContent = content.trimEnd() + '\n' + toAdd.join('\n') + '\n';
+      writeFileSync(excludedFilePath, newContent, { encoding: encoding as BufferEncoding });
+      logger.info(`Added ${toAdd.length} transitive dep(s) to ${path.basename(path.dirname(excludedFilePath))}/${path.basename(excludedFilePath)}`);
+    }
   }
 
   /**
@@ -202,12 +312,14 @@ export class PackageManagerUtils {
    * @param devDeps - Array of development dependencies
    * @param allDependencies - Map of all dependency information
    * @param paths - File paths object
+   * @param options - Optional harvest/check flags (falls back to process.argv in CLI mode)
    */
   public static processAndGenerateDocuments(
     prodDeps: string[],
     devDeps: string[],
     allDependencies: LicenseMap,
-    paths: FilePaths
+    paths: FilePaths,
+    options?: ProcessingOptions
   ): void {
     try {
       const depsToCQ: DependencyMap = new Map();
@@ -244,6 +356,7 @@ export class PackageManagerUtils {
       parseDependenciesFile(dependenciesStr, depsToCQ, allDependencies, unusedExcludes);
 
       // Auto-remove UNUSED Excludes from EXCLUDED files
+      // Case 1: redundant — approved by ClearlyDefined AND listed in EXCLUDED
       if (unusedExcludes.length > 0) {
         const toRemoveFromProd = unusedExcludes.filter(id => excludedProdIds.has(id));
         const toRemoveFromDev = unusedExcludes.filter(id => excludedDevIds.has(id));
@@ -255,6 +368,20 @@ export class PackageManagerUtils {
           this.removeUnusedExcludes(paths.EXCLUDED_DEV_MD, new Set(toRemoveFromDev), paths.ENCODING);
           logger.info(`Removed ${toRemoveFromDev.length} unused exclude(s) from EXCLUDED/dev.md`);
         }
+      }
+
+      // Case 2: orphan — listed in EXCLUDED but no longer present in the lock file
+      // (package removed or version bumped; the old identifier is stale)
+      const allCurrentDeps = new Set([...prodDeps, ...devDeps]);
+      const orphanFromProd = [...excludedProdIds].filter(id => !allCurrentDeps.has(id));
+      const orphanFromDev = [...excludedDevIds].filter(id => !allCurrentDeps.has(id));
+      if (orphanFromProd.length > 0) {
+        this.removeUnusedExcludes(paths.EXCLUDED_PROD_MD, new Set(orphanFromProd), paths.ENCODING);
+        logger.info(`Removed ${orphanFromProd.length} orphan exclude(s) from EXCLUDED/prod.md: ${orphanFromProd.join(', ')}`);
+      }
+      if (orphanFromDev.length > 0) {
+        this.removeUnusedExcludes(paths.EXCLUDED_DEV_MD, new Set(orphanFromDev), paths.ENCODING);
+        logger.info(`Removed ${orphanFromDev.length} orphan exclude(s) from EXCLUDED/dev.md: ${orphanFromDev.join(', ')}`);
       }
 
       // JAR fallback: if jarPath is set and we have unresolved deps, run Eclipse JAR and add approved to EXCLUDED
@@ -285,6 +412,48 @@ export class PackageManagerUtils {
           paths.ENCODING
         );
         approvedFromJar.forEach((cq, id) => depsToCQ.set(id, cq));
+      }
+
+      // Detect and handle transitive unresolved dependencies
+      const isHarvest = options?.harvest ?? process.argv.includes('--harvest');
+      const isCheck = options?.check ?? process.argv.includes('--check');
+      const directDeps = PackageManagerUtils.getDirectPackageNames(projectPath);
+
+      const getPackageName = (id: string): string => {
+        const at = id.lastIndexOf('@');
+        return at > 0 ? id.substring(0, at) : id;
+      };
+
+      // A package is "direct" if it appears in prod OR dev dependencies of any
+      // package.json in the project. Both sets must be checked for each dep
+      // regardless of which bucket (prod/dev) the dep was resolved into.
+      const isDirectPackage = (id: string): boolean => {
+        const name = getPackageName(id);
+        return directDeps.prod.has(name) || directDeps.dev.has(name);
+      };
+
+      const stillUnresolvedProd = prodDeps.filter(d => !depsToCQ.has(d));
+      const transitiveProd = stillUnresolvedProd.filter(d => !isDirectPackage(d));
+
+      const stillUnresolvedDev = devDeps.filter(d => !depsToCQ.has(d));
+      const transitiveDev = stillUnresolvedDev.filter(d => !isDirectPackage(d));
+
+      const allTransitive = [...transitiveProd, ...transitiveDev];
+      if (allTransitive.length > 0) {
+        if (isHarvest) {
+          this.appendTransitiveExcludes(paths.EXCLUDED_PROD_MD, transitiveProd, paths.ENCODING);
+          this.appendTransitiveExcludes(paths.EXCLUDED_DEV_MD, transitiveDev, paths.ENCODING);
+        } else {
+          const suggestion = isCheck
+            ? 'Run with --harvest to automatically add them, or update .deps/EXCLUDED manually.'
+            : 'Run with --harvest to automatically add them to .deps/EXCLUDED.';
+          console.log(`\nNote: ${allTransitive.length} UNRESOLVED transitive dep(s) found. ${suggestion}`);
+          console.log('  .deps/EXCLUDED should be updated with the next transitive deps:');
+          allTransitive.forEach(d => console.log(`    - ${d}`));
+          console.log();
+        }
+        // Suppress transitive deps from UNRESOLVED section and problems.md
+        allTransitive.forEach(d => depsToCQ.set(d, 'transitive dependency'));
       }
 
       // Generate production dependencies document

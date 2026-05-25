@@ -101,13 +101,13 @@ describe('Yarn Package Manager Files Integration', () => {
     it('should have yarn/bump-deps.ts export class', () => {
       const content = fs.readFileSync('src/package-managers/yarn/bump-deps.ts', 'utf8');
       expect(content).toContain('export class YarnDependencyProcessor');
-      expect(content).toContain('process()');
+      expect(content).toContain('public process(');
     });
 
     it('should have yarn3/bump-deps.ts export class', () => {
       const content = fs.readFileSync('src/package-managers/yarn3/bump-deps.ts', 'utf8');
       expect(content).toContain('export class Yarn3DependencyProcessor');
-      expect(content).toContain('process()');
+      expect(content).toContain('public process(');
     });
   });
 });

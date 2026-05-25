@@ -32,3 +32,5 @@ Thumbs.db
 
 # TypeScript compiled outputs
 *.d.ts.map
+openspec/
+dist/

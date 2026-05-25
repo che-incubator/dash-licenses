@@ -12,7 +12,7 @@
 
 import * as path from 'path';
 import { readFileSync } from 'fs';
-import { PackageManagerUtils, type FilePaths } from '../../helpers/utils';
+import { PackageManagerUtils, type FilePaths, type ProcessingOptions } from '../../helpers/utils';
 import type { LicenseMap, LicenseInfo } from '../../document';
 
 /**
@@ -96,7 +96,7 @@ export class YarnDependencyProcessor {
   /**
    * Process Yarn dependencies
    */
-  public process(): void {
+  public process(options?: ProcessingOptions): void {
     try {
       // Parse license information from yarn-deps-info.json
       this.parseLicenseInfo();
@@ -121,7 +121,8 @@ export class YarnDependencyProcessor {
         prodDeps,
         devDeps,
         this.allDependencies,
-        this.paths
+        this.paths,
+        options
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

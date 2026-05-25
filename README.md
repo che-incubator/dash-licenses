@@ -108,15 +108,16 @@ curl -Lo dash-licenses.jar https://repo.eclipse.org/repository/dash-maven2/org/e
 
 #### Auto-Harvesting with ClearlyDefined
 
-The `--harvest` flag enables automatic harvest requests for unresolved dependencies through the ClearlyDefined API.
+The `--harvest` flag enables automatic harvest requests for unresolved dependencies through the ClearlyDefined API. It also auto-excludes **transitive** unresolved dependencies (those not listed directly in `package.json`) by appending them to `.deps/EXCLUDED/` with the value `transitive dependency`, so they don't block future runs.
 
 **Why use it?** When ClearlyDefined doesn't have license information for a package, you can request it to "harvest" the license data from the source repository. This process extracts license files and headers automatically.
 
 **How it works**:
-1. For each unresolved dependency, check if it was already harvested (`GET /harvest/{coordinate}`)
-2. If not harvested, request a new harvest (`POST /harvest`)
-3. ClearlyDefined queues the harvest job (typically completes in minutes to hours)
-4. Re-run `npx @eclipse-che/license-tool` after harvest completes to pick up new license data
+1. Transitive unresolved deps are written to `.deps/EXCLUDED/{prod,dev}.md` as `transitive dependency` — no ClearlyDefined request is sent for them
+2. For each remaining (direct) unresolved dependency, check if it was already harvested (`GET /harvest/{coordinate}`)
+3. If not harvested, request a new harvest (`POST /harvest`)
+4. ClearlyDefined queues the harvest job (typically completes in minutes to hours)
+5. Re-run `npx @eclipse-che/license-tool` after harvest completes to pick up new license data
 
 **Example**:
 ```sh
@@ -158,9 +159,9 @@ Generated in `.deps/`:
 |---|---|
 | `prod.md` | Production dependencies |
 | `dev.md` | Development dependencies |
-| `problems.md` | Unresolved or restricted dependencies |
-| `EXCLUDED/prod.md` | Manually excluded production deps |
-| `EXCLUDED/dev.md` | Manually excluded dev deps |
+| `problems.md` | Unresolved or restricted **direct** dependencies (transitive deps are omitted) |
+| `EXCLUDED/prod.md` | Excluded production deps (CQs, manual approvals, or `transitive dependency`) |
+| `EXCLUDED/dev.md` | Excluded dev deps (CQs, manual approvals, or `transitive dependency`) |
 
 ## API
 
@@ -194,24 +195,115 @@ Returns `Promise<{ exitCode: 0 | 1; error?: string }>`.
 
 ## Development
 
+### Prerequisites
+
+- Node.js >= 20.0.0
+- npm >= 8
+
+### Setup
+
 ```sh
+git clone https://github.com/che-incubator/dash-licenses.git
+cd dash-licenses
 npm install
+```
+
+### Build
+
+```sh
+# Production build (output → dist/)
 npm run build
+
+# Development build (unminified, faster)
+npm run build:dev
+
+# Watch mode — rebuilds on every file change
+npm run build:watch
+```
+
+> The `build` script runs `npm run clean` first (removes `dist/` and `*.tsbuildinfo`), then compiles all TypeScript with webpack.
+
+### Test
+
+```sh
+# Run all tests
 npm test
+
+# Run only unit tests (src/**/*.test.ts)
+npm run test:unit
+
+# Run only end-to-end tests (tests/e2e/**/*.test.ts)
+npm run test:e2e
+
+# Watch mode — re-runs tests on file change
+npm run test:watch
+
+# Generate a coverage report
+npm run test:coverage
+```
+
+### Lint & type-check
+
+```sh
+# Check for lint errors
 npm run lint
+
+# Auto-fix lint errors
+npm run lint:fix
+
+# TypeScript type-check without emitting files
+npm run type-check
+
+# Check that all source files have the EPL-2.0 license header
+npm run header:check
+
+# Auto-add missing license headers
+npm run header:fix
+```
+
+### Run locally against a real project
+
+After a build the CLI is available at `dist/cli.js`. You can point it at any project that has a `package.json` and a lock file:
+
+```sh
+# Generate .deps/ files for a project
+node dist/cli.js /path/to/your/project
+
+# Check mode (read-only, no files written)
+node dist/cli.js --check /path/to/your/project
+
+# Auto-exclude transitive unresolved dependencies and update .deps/EXCLUDED/
+node dist/cli.js --harvest /path/to/your/project
+
+# Debug mode (keeps .deps/tmp/ for inspection)
+node dist/cli.js --debug /path/to/your/project
+```
+
+Alternatively, install the package globally from your local build:
+
+```sh
+npm pack            # creates eclipse-che-license-tool-*.tgz
+npm install -g eclipse-che-license-tool-*.tgz
+license-tool --help
 ```
 
 ### Scripts
 
 | Script | Description |
 |---|---|
-| `npm run build` | Compile TypeScript with webpack |
+| `npm run build` | Production webpack build (runs clean first) |
+| `npm run build:dev` | Development webpack build (unminified) |
+| `npm run build:watch` | Webpack in watch mode |
 | `npm test` | Run all tests |
-| `npm run test:unit` | Run unit tests only |
-| `npm run test:e2e` | Run end-to-end tests |
-| `npm run lint` | Run ESLint |
-| `npm run header:check` | Check license headers |
+| `npm run test:unit` | Unit tests only (`src/**`) |
+| `npm run test:e2e` | End-to-end tests only (`tests/e2e/**`) |
+| `npm run test:watch` | Jest in watch mode |
+| `npm run test:coverage` | Jest with coverage report |
+| `npm run lint` | ESLint check |
+| `npm run lint:fix` | ESLint auto-fix |
 | `npm run type-check` | TypeScript type check (no emit) |
+| `npm run header:check` | Verify EPL-2.0 license headers |
+| `npm run header:fix` | Add missing license headers |
 
 ## Risks and Limitations
 

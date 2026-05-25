@@ -78,7 +78,8 @@ src/
 │   ├── chunked-processor.ts        # Batch processing orchestrator
 │   ├── package-manager-base.ts     # Base class for processors
 │   ├── types.ts                    # Environment & options types
-│   ├── utils.ts                    # Utility functions
+│   ├── utils.ts                    # PackageManagerUtils: file paths, transitive
+│   │                               #   dep detection, EXCLUDED hygiene
 │   ├── jar-fallback.ts             # JAR fallback logic
 │   └── logger.ts                   # Logging utility
 │
@@ -124,8 +125,9 @@ Each package manager has three files:
 
 - Reads DEPENDENCIES file (format: `id, license, status, source`)
 - Reads EXCLUDED files (markdown tables with manual exclusions)
+- Classifies still-unresolved deps as **direct** or **transitive** by scanning all `package.json` files in the project (root + every workspace package) — direct deps need a CQ; transitive deps are suppressed from `problems.md`
+- Auto-removes orphan entries from EXCLUDED files on each run
 - Generates prod.md, dev.md, problems.md
-- Tracks unresolved dependencies
 
 ## Data Flow
 
@@ -147,7 +149,7 @@ Set by `library.ts` for child processes:
 - `PROJECT_COPY_DIR`: Project directory path
 - `TMP_DIR`: Temporary directory for processing (`.deps/tmp`)
 - `DEPS_COPY_DIR`: Output directory (`.deps/`)
-- `WORKSPACE_DIR`: Path to compiled code (dist/)
+- `WORKSPACE_DIR`: Path to compiled code (`dist/`, not tracked in git — run `npm run build` to generate)
 - `BATCH_SIZE`: Number of dependencies per batch
 - `JAR_PATH`: Optional path to Eclipse dash-licenses.jar
 
@@ -156,5 +158,16 @@ Set by `library.ts` for child processes:
 - **check**: Read-only mode, no file generation (only validation)
 - **debug**: Keep temporary files for inspection in `.deps/tmp/`
 - **batchSize**: Dependencies per batch (default: 500)
-- **harvest**: Auto-request harvest for unresolved dependencies via ClearlyDefined API
+- **harvest**: Auto-request harvest for unresolved dependencies via ClearlyDefined API; also auto-writes transitive unresolved deps to `.deps/EXCLUDED/` files
 - **jarPath**: Enable JAR fallback for unresolved dev dependencies via Eclipse IP database
+
+### Transitive Dependency Handling
+
+After license resolution, any still-unresolved dependency is classified as either **direct** (appears in any `package.json` in the project — root or workspace) or **transitive** (pulled in by another package, not declared directly). The `getDirectPackageNames()` utility scans all workspace directories listed in the root `package.json` `workspaces` field, so monorepos are handled correctly.
+
+| Classification | `--generate` | `--check` | `--harvest` |
+|---|---|---|---|
+| Direct unresolved | Fails; written to `problems.md` | Fails | Harvest requested |
+| Transitive unresolved | Suppressed; console note | Suppressed; note with advice | Written to `.deps/EXCLUDED/` |
+
+EXCLUDED files are also automatically cleaned of orphan entries (packages no longer in the dependency tree) on every run.

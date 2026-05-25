@@ -37,6 +37,19 @@ Welcome to the license-tool documentation. This directory contains comprehensive
 
 ---
 
+### [Harvest & Transitive Dependencies](./harvest.md)
+**Purpose**: Understand `--harvest` mode and automatic transitive dependency handling
+
+**Contents**:
+- What ClearlyDefined harvesting is and how it works
+- How transitive (indirect) deps are detected and suppressed from `problems.md`
+- Behaviour table: direct vs transitive in generate / check / harvest modes
+- Best practices and rate limits
+
+**Read this if**: You want to understand `--harvest`, or why some unresolved deps don't fail the build
+
+---
+
 ### [Package Managers](./package-managers.md)
 **Purpose**: Understand how each package manager is implemented
 
@@ -60,6 +73,7 @@ Welcome to the license-tool documentation. This directory contains comprehensive
 - **Adding a feature**: Start with [Architecture](./architecture.md)
 - **Debugging an issue**: Check [Request Flow](./request-flow.md)
 - **Adding package manager**: Read [Package Managers](./package-managers.md)
+- **Understanding transitive deps**: Read [Harvest & Transitive Dependencies](./harvest.md)
 
 ### For Users
 

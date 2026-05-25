@@ -12,7 +12,7 @@
 
 import * as path from 'path';
 import { readFileSync, existsSync } from 'fs';
-import { PackageManagerUtils, type FilePaths } from '../../helpers/utils';
+import { PackageManagerUtils, type FilePaths, type ProcessingOptions } from '../../helpers/utils';
 import type { LicenseMap, LicenseInfo } from '../../document';
 
 interface LockfileDepsInfo {
@@ -58,7 +58,7 @@ export class Yarn3DependencyProcessor {
     return info;
   }
 
-  public process(): void {
+  public process(options?: ProcessingOptions): void {
     try {
       const depsInfoPath = path.join(this.paths.TMP_DIR, 'yarn3-deps-info.json');
       if (!existsSync(depsInfoPath)) {
@@ -78,7 +78,8 @@ export class Yarn3DependencyProcessor {
         prodDeps,
         devDeps,
         this.allDependencies,
-        this.paths
+        this.paths,
+        options
       );
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
