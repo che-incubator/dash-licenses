@@ -48,6 +48,12 @@ export interface Options {
   check: boolean;
   debug: boolean;
   harvest: boolean;
+  /**
+   * When true, bypass the .deps/prod.md + .deps/dev.md cache and re-query
+   * ClearlyDefined for every dependency, even ones already resolved.
+   * Default: false (cache is used).
+   */
+  recheck: boolean;
 }
 
 /**
@@ -84,10 +90,11 @@ export function parseEnvironment(overrides?: Partial<Environment>): Environment 
  * Pass overrides for library usage.
  */
 export function parseOptions(overrides?: Partial<Options>): Options {
-  const opts = {
+  const opts: Options = {
     check: process.argv.includes('--check'),
     debug: process.argv.includes('--debug'),
     harvest: process.argv.includes('--harvest'),
+    recheck: process.argv.includes('--recheck'),
   };
   return overrides ? { ...opts, ...overrides } : opts;
 }

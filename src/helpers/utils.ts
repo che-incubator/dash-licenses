@@ -103,6 +103,76 @@ export interface ProcessingOptions {
 }
 
 /**
+ * Parse an npm coordinate string into a package identifier.
+ *
+ * Coordinates use the ClearlyDefined format:
+ *   npm/npmjs/-/express/4.18.0        → express@4.18.0
+ *   npm/npmjs/@babel/core/7.0.0       → @babel/core@7.0.0
+ *
+ * Returns an empty string for non-npm coordinates or malformed input.
+ */
+export function coordinateToIdentifier(coordinate: string): string {
+  const parts = coordinate.split('/');
+  if (parts.length < 5 || parts[0] !== 'npm') return '';
+  const scope = parts[2];
+  const name = parts[3];
+  const version = parts.slice(4).join('/');
+  if (scope === '-') return `${name}@${version}`;
+  return `${scope}/${name}@${version}`;
+}
+
+/**
+ * Convert a package identifier back to an npm coordinate.
+ *
+ *   express@4.18.0      → npm/npmjs/-/express/4.18.0
+ *   @babel/core@7.0.0  → npm/npmjs/@babel/core/7.0.0
+ *
+ * Returns an empty string for identifiers without a version.
+ */
+export function identifierToCoordinate(identifier: string): string {
+  const atIdx = identifier.lastIndexOf('@');
+  if (atIdx <= 0) return '';
+  const name = identifier.slice(0, atIdx);
+  const version = identifier.slice(atIdx + 1);
+  if (!version) return '';
+  if (name.startsWith('@')) {
+    const slashIdx = name.indexOf('/');
+    const scope = name.slice(0, slashIdx);
+    const pkg = name.slice(slashIdx + 1);
+    return `npm/npmjs/${scope}/${pkg}/${version}`;
+  }
+  return `npm/npmjs/-/${name}/${version}`;
+}
+
+/**
+ * Load already-resolved dependencies from the existing .deps/prod.md and
+ * .deps/dev.md files and return them as a map of identifier → cq_value.
+ *
+ * Only entries whose "Resolved CQs" column is non-empty are included.
+ * Empty CQ cells mean the dependency is still unresolved and must be queried.
+ */
+export function loadResolvedCache(
+  prodMdPath: string,
+  devMdPath: string,
+): Map<string, string> {
+  const cache = new Map<string, string>();
+  for (const filePath of [prodMdPath, devMdPath]) {
+    if (!existsSync(filePath)) continue;
+    const content = readFileSync(filePath, { encoding: 'utf8' as BufferEncoding });
+    const rowPattern = /^\| `([^`]+)` \| ([^|]+) \| (.+) \|$/gm;
+    let match: RegExpExecArray | null;
+    while ((match = rowPattern.exec(content)) !== null) {
+      const identifier = match[1].trim();
+      const cq = match[3].trim();
+      if (cq) {
+        cache.set(identifier, cq);
+      }
+    }
+  }
+  return cache;
+}
+
+/**
  * Shared utilities for package manager implementations
  */
 export class PackageManagerUtils {

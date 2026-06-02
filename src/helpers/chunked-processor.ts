@@ -15,7 +15,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import type { LicenseBackend } from '../backends/types';
 import { ClearlyDefinedBackend } from '../backends/clearlydefined-backend';
 import { JarBackend } from '../backends/jar-backend';
-import { sleep, parseNonEmptyLines, getErrorMessage } from './utils';
+import { sleep, parseNonEmptyLines, getErrorMessage, coordinateToIdentifier } from './utils';
 import { logger } from './logger';
 
 /** Default maximum number of retry attempts for chunk processing */
@@ -40,6 +40,14 @@ export interface ChunkedProcessorOptions {
   retryDelayMs?: number;
   /** Custom license backend. If not set, uses ClearlyDefinedBackend when dashLicensesJar is absent. */
   backend?: LicenseBackend;
+  /**
+   * Pre-resolved cache from existing .deps/prod.md + .deps/dev.md.
+   * Keys are package identifiers (e.g. "express@4.18.0"); values are the
+   * resolved CQ string (e.g. "[clearlydefined](...)").
+   * Coordinates present in the cache are written directly to the output file
+   * without calling the API.  Omit or leave empty to query everything.
+   */
+  cachedResolutions?: Map<string, string>;
 }
 
 export class ChunkedDashLicensesProcessor {
@@ -64,7 +72,9 @@ export class ChunkedDashLicensesProcessor {
   }
 
   /**
-   * Process dependencies in chunks to avoid timeouts and API limits
+   * Process dependencies in chunks to avoid timeouts and API limits.
+   * If cachedResolutions is provided, coordinates that already appear in the
+   * cache are written directly to the output file without calling the API.
    */
   public async process(): Promise<void> {
     const startTime = Date.now();
@@ -81,12 +91,51 @@ export class ChunkedDashLicensesProcessor {
 
     logger.info(`Total dependencies to process: ${allDependencies.length}`);
 
+    // Step 1b: Apply cache — split into cached vs. new
+    const cache = this.options.cachedResolutions;
+    let depsToQuery = allDependencies;
+    const cachedLines: string[] = [];
+
+    if (cache && cache.size > 0) {
+      depsToQuery = [];
+      for (const coord of allDependencies) {
+        const id = coordinateToIdentifier(coord);
+        if (id && cache.has(id)) {
+          // Reconstruct a DEPENDENCIES-format line from the cached CQ value.
+          // Format: coordinate, license, approved, clearlydefined
+          const cq = cache.get(id)!;
+          // Extract license from cq map if we stored it; otherwise use 'unknown'
+          // (processAndGenerateDocuments will read licence from the DEPENDENCIES file)
+          // We emit a minimal valid line — licence will be re-read from ClearlyDefined
+          // data already embedded in the link.  Use 'approved' status.
+          const licenseMatch = cq.match(/\[([A-Za-z0-9\-. +]+)\]/);
+          const license = licenseMatch ? licenseMatch[1] : 'unknown';
+          cachedLines.push(`${coord}, ${license}, approved, clearlydefined`);
+        } else {
+          depsToQuery.push(coord);
+        }
+      }
+      if (cachedLines.length > 0) {
+        logger.info(`Cache hit: ${cachedLines.length} dependencies skipped (already resolved).`);
+      }
+      if (depsToQuery.length > 0) {
+        logger.info(`Cache miss: ${depsToQuery.length} new/unresolved dependencies to query.`);
+      }
+    }
+
+    // If all deps are cached, write the cached lines and we're done.
+    if (depsToQuery.length === 0) {
+      writeFileSync(this.options.outputFile, cachedLines.join('\n') + (cachedLines.length ? '\n' : ''));
+      logger.success(`Merged ${cachedLines.length} unique dependencies into ${this.options.outputFile}`);
+      logger.success(`Successfully processed all ${allDependencies.length} dependencies (all from cache)`);
+      logger.duration('Total processing time', Date.now() - startTime);
+      return;
+    }
+
     // Step 2: Split into chunks
     // Use batch size directly to ensure ClearlyDefined queries stay small
-    // (Eclipse Foundation resolves ~30-50%, leaving remaining for ClearlyDefined)
-    // With chunk = batch, ClearlyDefined gets ~70-150 items max, which is reliable
     const chunkSize = this.options.batchSize;
-    const chunks = this.splitIntoChunks(allDependencies, chunkSize);
+    const chunks = this.splitIntoChunks(depsToQuery, chunkSize);
 
     logger.info(`Split into ${chunks.length} chunks (max ${chunkSize} dependencies per chunk)`);
 
@@ -119,8 +168,9 @@ export class ChunkedDashLicensesProcessor {
     }
 
     // Step 4: Merge all chunk results into final DEPENDENCIES file
+    // Include cached lines so the full set of dependencies is in the output.
     logger.info('Merging chunk results...');
-    const totalEntries = this.mergeChunkResults(tempFiles);
+    const totalEntries = this.mergeChunkResults(tempFiles, cachedLines);
     logger.success(`Merged ${totalEntries} unique dependencies into ${this.options.outputFile}`);
 
     // Step 5: Clean up temporary files
@@ -275,20 +325,18 @@ export class ChunkedDashLicensesProcessor {
   }
 
   /**
-   * Merge all chunk results into final DEPENDENCIES file
+   * Merge all chunk results (and any pre-cached lines) into the final
+   * DEPENDENCIES file, deduplicating and sorting entries.
    */
-  private mergeChunkResults(tempFiles: string[]): number {
-    // Use a Set to deduplicate entries
-    const allEntries = new Set<string>();
+  private mergeChunkResults(tempFiles: string[], cachedLines: string[] = []): number {
+    const allEntries = new Set<string>(cachedLines);
 
     for (const tempFile of tempFiles) {
       if (existsSync(tempFile)) {
         try {
           const content = readFileSync(tempFile, 'utf8');
           const lines = parseNonEmptyLines(content);
-
           lines.forEach(line => allEntries.add(line));
-
           logger.debug(`  Merged ${lines.length} entries from ${tempFile}`);
         } catch (error: unknown) {
           const errorMsg = error instanceof Error ? error.message : String(error);
@@ -301,12 +349,8 @@ export class ChunkedDashLicensesProcessor {
       throw new Error('No entries found in any chunk output files');
     }
 
-    // Sort entries for consistent output (important for git diffs)
     const sortedEntries = Array.from(allEntries).sort();
-
-    // Write to final file
     writeFileSync(this.options.outputFile, sortedEntries.join('\n') + '\n', 'utf8');
-
     return sortedEntries.length;
   }
 

@@ -141,6 +141,7 @@ describe('Options interface', () => {
       check: true,
       debug: false,
       harvest: false,
+      recheck: false,
     };
 
     expect(options).toHaveProperty('check');

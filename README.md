@@ -64,6 +64,9 @@ npx @eclipse-che/license-tool --batch 200
 # Auto-request harvest for unresolved dependencies
 npx @eclipse-che/license-tool --harvest
 
+# Force a full re-query, bypassing the cache
+npx @eclipse-che/license-tool --recheck
+
 # JAR fallback for unresolved dev dependencies
 npx @eclipse-che/license-tool --jar /path/to/dash-licenses.jar
 ```
@@ -77,9 +80,16 @@ npx @eclipse-che/license-tool --jar /path/to/dash-licenses.jar
 | `--check` | Check only, do not write any files | `false` |
 | `--batch <n>` | Batch size for ClearlyDefined API requests | `500` |
 | `--harvest` | Request harvest for unresolved deps from ClearlyDefined | `false` |
+| `--recheck` | Bypass the `.deps/` cache and re-query ClearlyDefined for every dependency | `false` |
 | `--jar <path>` | Path to Eclipse `dash-licenses.jar` for fallback on unresolved dev deps | — |
 | `--debug` | Copy tmp files for inspection | `false` |
 | `--help` | Show help message | — |
+
+#### Dependency cache
+
+By default the tool reads `.deps/prod.md` and `.deps/dev.md` before calling ClearlyDefined. Any dependency whose **Resolved CQs** column is non-empty (contains a `clearlydefined` link or a CQ number) is considered already resolved and is **skipped** — only new or previously unresolved dependencies are sent to the API. This dramatically reduces API calls for projects with stable dependency trees.
+
+Use `--recheck` to force a full re-query of all dependencies and regenerate the files from scratch.
 
 #### Downloading the Eclipse Dash JAR
 

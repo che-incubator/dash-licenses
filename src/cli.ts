@@ -19,6 +19,7 @@ function parseArgs(): {
   check: boolean;
   debug: boolean;
   harvest: boolean;
+  recheck: boolean;
   jarPath?: string;
 } {
   const args = process.argv.slice(2);
@@ -27,6 +28,7 @@ function parseArgs(): {
   let check = false;
   let debug = false;
   let harvest = false;
+  let recheck = false;
   let jarPath: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
@@ -40,14 +42,26 @@ Options:
   --batch <n>    Batch size (default: 500)
   --debug        Copy tmp files for inspection
   --harvest      Request harvest for unresolved dependencies from ClearlyDefined
+  --recheck      Bypass the .deps/prod.md + .deps/dev.md cache and re-query
+                 ClearlyDefined for every dependency (default: cache is used)
   --jar <path>   Optional path to Eclipse dash-licenses.jar for fallback on unresolved dev deps
   --help         Show this message
+
+Cache behaviour (default):
+  On each run the tool reads .deps/prod.md and .deps/dev.md. Any dependency
+  that already has a non-empty "Resolved CQs" column (e.g. a clearlydefined
+  link) is considered resolved and is skipped — only new or previously
+  unresolved dependencies are sent to ClearlyDefined. This dramatically
+  reduces API calls for projects with stable dependency trees.
+
+  Use --recheck to force a full re-query of all dependencies.
 
 Examples:
   npx license-tool
   npx license-tool --check --batch 200
   npx license-tool /path/to/project
   npx license-tool --harvest
+  npx license-tool --recheck
   npx license-tool --jar /path/to/dash-licenses.jar
 `);
       process.exit(0);
@@ -55,6 +69,7 @@ Examples:
     if (args[i] === '--check') check = true;
     else if (args[i] === '--debug') debug = true;
     else if (args[i] === '--harvest') harvest = true;
+    else if (args[i] === '--recheck') recheck = true;
     else if (args[i] === '--batch' && args[i + 1]) {
       batchSize = parseInt(args[++i], 10);
       if (isNaN(batchSize)) batchSize = 500;
@@ -66,8 +81,8 @@ Examples:
   }
 
   return jarPath
-    ? { projectPath, batchSize, check, debug, harvest, jarPath }
-    : { projectPath, batchSize, check, debug, harvest };
+    ? { projectPath, batchSize, check, debug, harvest, recheck, jarPath }
+    : { projectPath, batchSize, check, debug, harvest, recheck };
 }
 
 async function main(): Promise<void> {

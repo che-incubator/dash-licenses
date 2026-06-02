@@ -19,6 +19,7 @@ import { parseYarnDependencies } from './parser';
 import { YarnDependencyProcessor } from './bump-deps';
 import type { Environment, Options } from '../../helpers/types';
 import { environmentToProcessEnv } from '../../helpers/types';
+import { loadResolvedCache } from '../../helpers/utils';
 
 /**
  * Yarn v1 package manager processor.
@@ -61,6 +62,13 @@ export class YarnProcessor extends PackageManagerBase {
     const depsFilePath = path.join(this.env.TMP_DIR, 'DEPENDENCIES');
 
     try {
+      const cachedResolutions = this.options.recheck
+        ? undefined
+        : loadResolvedCache(
+            path.join(this.env.DEPS_DIR, 'prod.md'),
+            path.join(this.env.DEPS_DIR, 'dev.md'),
+          );
+
       const processor = new ChunkedDashLicensesProcessor({
         parserScript: 'cat',
         parserInput: allDepsFile,
@@ -68,7 +76,8 @@ export class YarnProcessor extends PackageManagerBase {
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
         debug: this.options.debug,
-        enableHarvest: this.options.harvest
+        enableHarvest: this.options.harvest,
+        ...(cachedResolutions ? { cachedResolutions } : {}),
       });
 
       await processor.process();

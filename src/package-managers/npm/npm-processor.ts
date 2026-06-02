@@ -18,6 +18,7 @@ import { parseNpmDependencies } from './parser';
 import { NpmDependencyProcessor } from './bump-deps';
 import type { Environment, Options } from '../../helpers/types';
 import { environmentToProcessEnv } from '../../helpers/types';
+import { loadResolvedCache } from '../../helpers/utils';
 
 /**
  * NPM package manager processor.
@@ -61,6 +62,13 @@ export class NpmProcessor extends PackageManagerBase {
     const depsFilePath = path.join(this.env.TMP_DIR, 'DEPENDENCIES');
 
     try {
+      const cachedResolutions = this.options.recheck
+        ? undefined
+        : loadResolvedCache(
+            path.join(this.env.DEPS_DIR, 'prod.md'),
+            path.join(this.env.DEPS_DIR, 'dev.md'),
+          );
+
       const processor = new ChunkedDashLicensesProcessor({
         parserScript: 'cat',
         parserInput: allDepsFile,
@@ -68,7 +76,8 @@ export class NpmProcessor extends PackageManagerBase {
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
         debug: this.options.debug,
-        enableHarvest: this.options.harvest
+        enableHarvest: this.options.harvest,
+        ...(cachedResolutions ? { cachedResolutions } : {}),
       });
 
       await processor.process();

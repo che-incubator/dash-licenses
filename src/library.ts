@@ -32,6 +32,11 @@ export interface LibraryConfig {
   debug?: boolean;
   /** If true, request harvest for unresolved dependencies from ClearlyDefined (default: false) */
   harvest?: boolean;
+  /**
+   * If true, bypass the .deps/prod.md + .deps/dev.md cache and re-query
+   * ClearlyDefined for every dependency (default: false — cache is used).
+   */
+  recheck?: boolean;
   /** Optional path to Eclipse dash-licenses.jar for fallback check of unresolved dev deps */
   jarPath?: string;
 }
@@ -119,7 +124,8 @@ export async function generate(config: LibraryConfig): Promise<LibraryResult> {
   const options = {
     check: config.check ?? false,
     debug: config.debug ?? false,
-    harvest: config.harvest ?? false
+    harvest: config.harvest ?? false,
+    recheck: config.recheck ?? false,
   };
 
   // Ensure .deps directory structure exists
