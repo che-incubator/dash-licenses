@@ -54,6 +54,16 @@ export interface Options {
    * Default: false (cache is used).
    */
   recheck: boolean;
+  /**
+   * Timeout for ClearlyDefined batch POST /definitions requests in ms.
+   * Default: 10 000 ms.
+   */
+  postTimeoutMs?: number;
+  /**
+   * Timeout for ClearlyDefined individual GET /definitions/{id} requests in ms.
+   * Default: 5 000 ms.
+   */
+  getTimeoutMs?: number;
 }
 
 /**

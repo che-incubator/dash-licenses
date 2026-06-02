@@ -81,6 +81,8 @@ npx @eclipse-che/license-tool --jar /path/to/dash-licenses.jar
 | `--batch <n>` | Batch size for ClearlyDefined API requests | `500` |
 | `--harvest` | Request harvest for unresolved deps from ClearlyDefined | `false` |
 | `--recheck` | Bypass the `.deps/` cache and re-query ClearlyDefined for every dependency | `false` |
+| `--post-timeout <ms>` | Timeout for batch POST `/definitions` requests | `10000` ms |
+| `--get-timeout <ms>` | Timeout for individual GET `/definitions/{id}` requests | `5000` ms |
 | `--jar <path>` | Path to Eclipse `dash-licenses.jar` for fallback on unresolved dev deps | — |
 | `--debug` | Copy tmp files for inspection | `false` |
 | `--help` | Show help message | — |

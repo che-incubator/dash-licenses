@@ -37,6 +37,16 @@ export interface LibraryConfig {
    * ClearlyDefined for every dependency (default: false — cache is used).
    */
   recheck?: boolean;
+  /**
+   * Timeout for ClearlyDefined batch POST /definitions requests in ms.
+   * Default: 10 000 ms.
+   */
+  postTimeoutMs?: number;
+  /**
+   * Timeout for ClearlyDefined individual GET /definitions/{id} requests in ms.
+   * Default: 5 000 ms.
+   */
+  getTimeoutMs?: number;
   /** Optional path to Eclipse dash-licenses.jar for fallback check of unresolved dev deps */
   jarPath?: string;
 }
@@ -126,6 +136,8 @@ export async function generate(config: LibraryConfig): Promise<LibraryResult> {
     debug: config.debug ?? false,
     harvest: config.harvest ?? false,
     recheck: config.recheck ?? false,
+    ...(config.postTimeoutMs !== undefined ? { postTimeoutMs: config.postTimeoutMs } : {}),
+    ...(config.getTimeoutMs !== undefined ? { getTimeoutMs: config.getTimeoutMs } : {}),
   };
 
   // Ensure .deps directory structure exists

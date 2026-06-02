@@ -38,6 +38,16 @@ export interface ChunkedProcessorOptions {
   enableHarvest?: boolean;
   maxRetries?: number;
   retryDelayMs?: number;
+  /**
+   * Timeout for ClearlyDefined batch POST /definitions requests (ms).
+   * Default: 10 000 ms.
+   */
+  postTimeoutMs?: number;
+  /**
+   * Timeout for ClearlyDefined individual GET /definitions/{id} requests (ms).
+   * Default: 5 000 ms.
+   */
+  getTimeoutMs?: number;
   /** Custom license backend. If not set, uses ClearlyDefinedBackend when dashLicensesJar is absent. */
   backend?: LicenseBackend;
   /**
@@ -68,7 +78,11 @@ export class ChunkedDashLicensesProcessor {
             options.batchSize,
             options.debug
           )
-        : new ClearlyDefinedBackend({ enableHarvest: options.enableHarvest ?? false }));
+        : new ClearlyDefinedBackend({
+            enableHarvest: options.enableHarvest ?? false,
+            ...(options.postTimeoutMs !== undefined ? { postTimeoutMs: options.postTimeoutMs } : {}),
+            ...(options.getTimeoutMs !== undefined ? { getTimeoutMs: options.getTimeoutMs } : {}),
+          }));
   }
 
   /**

@@ -20,6 +20,8 @@ function parseArgs(): {
   debug: boolean;
   harvest: boolean;
   recheck: boolean;
+  postTimeoutMs?: number;
+  getTimeoutMs?: number;
   jarPath?: string;
 } {
   const args = process.argv.slice(2);
@@ -29,6 +31,8 @@ function parseArgs(): {
   let debug = false;
   let harvest = false;
   let recheck = false;
+  let postTimeoutMs: number | undefined;
+  let getTimeoutMs: number | undefined;
   let jarPath: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
@@ -42,10 +46,12 @@ Options:
   --batch <n>    Batch size (default: 500)
   --debug        Copy tmp files for inspection
   --harvest      Request harvest for unresolved dependencies from ClearlyDefined
-  --recheck      Bypass the .deps/prod.md + .deps/dev.md cache and re-query
-                 ClearlyDefined for every dependency (default: cache is used)
-  --jar <path>   Optional path to Eclipse dash-licenses.jar for fallback on unresolved dev deps
-  --help         Show this message
+  --recheck             Bypass the .deps/prod.md + .deps/dev.md cache and re-query
+                        ClearlyDefined for every dependency (default: cache is used)
+  --post-timeout <ms>   Timeout for batch POST /definitions requests (default: 10000 ms)
+  --get-timeout <ms>    Timeout for individual GET /definitions/{id} requests (default: 5000 ms)
+  --jar <path>          Optional path to Eclipse dash-licenses.jar for fallback on unresolved dev deps
+  --help                Show this message
 
 Cache behaviour (default):
   On each run the tool reads .deps/prod.md and .deps/dev.md. Any dependency
@@ -62,6 +68,7 @@ Examples:
   npx license-tool /path/to/project
   npx license-tool --harvest
   npx license-tool --recheck
+  npx license-tool --post-timeout 20000 --get-timeout 10000
   npx license-tool --jar /path/to/dash-licenses.jar
 `);
       process.exit(0);
@@ -70,7 +77,13 @@ Examples:
     else if (args[i] === '--debug') debug = true;
     else if (args[i] === '--harvest') harvest = true;
     else if (args[i] === '--recheck') recheck = true;
-    else if (args[i] === '--batch' && args[i + 1]) {
+    else if (args[i] === '--post-timeout' && args[i + 1]) {
+      const v = parseInt(args[++i], 10);
+      if (!isNaN(v) && v > 0) postTimeoutMs = v;
+    } else if (args[i] === '--get-timeout' && args[i + 1]) {
+      const v = parseInt(args[++i], 10);
+      if (!isNaN(v) && v > 0) getTimeoutMs = v;
+    } else if (args[i] === '--batch' && args[i + 1]) {
       batchSize = parseInt(args[++i], 10);
       if (isNaN(batchSize)) batchSize = 500;
     } else if (args[i] === '--jar' && args[i + 1]) {
@@ -80,9 +93,14 @@ Examples:
     }
   }
 
+  const base = { projectPath, batchSize, check, debug, harvest, recheck };
+  const timeouts = {
+    ...(postTimeoutMs !== undefined ? { postTimeoutMs } : {}),
+    ...(getTimeoutMs !== undefined ? { getTimeoutMs } : {}),
+  };
   return jarPath
-    ? { projectPath, batchSize, check, debug, harvest, recheck, jarPath }
-    : { projectPath, batchSize, check, debug, harvest, recheck };
+    ? { ...base, ...timeouts, jarPath }
+    : { ...base, ...timeouts };
 }
 
 async function main(): Promise<void> {

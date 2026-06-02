@@ -23,8 +23,10 @@ const POST_BATCH_SIZE = 100;
 const POST_CONCURRENCY = 2;
 /** Delay between POST batches (ms) */
 const POST_BATCH_DELAY_MS = 500;
-/** Timeout for batch POST requests (ms) - longer than individual GETs */
-const POST_TIMEOUT_MS = 60000;
+/** Default timeout for batch POST requests (ms) */
+const DEFAULT_POST_TIMEOUT_MS = 10000;
+/** Default timeout for individual GET requests (ms) */
+const DEFAULT_GET_TIMEOUT_MS = 5000;
 
 /** Legacy: Concurrency limit for individual GET requests */
 const GET_CONCURRENCY = 8;
@@ -36,14 +38,25 @@ const GET_BATCH_DELAY_MS = 200;
  * Fetches license data from api.clearlydefined.io and applies approval policy.
  */
 export class ClearlyDefinedBackend implements LicenseBackend {
-  private readonly timeoutMs: number;
+  private readonly postTimeoutMs: number;
+  private readonly getTimeoutMs: number;
   private readonly useBatchAPI: boolean;
   private readonly enableHarvest: boolean;
 
-  constructor(options?: { timeoutMs?: number; useBatchAPI?: boolean; enableHarvest?: boolean }) {
-    this.timeoutMs = options?.timeoutMs ?? 30000;
-    this.useBatchAPI = options?.useBatchAPI ?? true; // Default to batch POST API
-    this.enableHarvest = options?.enableHarvest ?? false; // Default: harvest disabled
+  constructor(options?: {
+    /** Timeout for batch POST /definitions requests (default: 10 000 ms). */
+    postTimeoutMs?: number;
+    /** Timeout for individual GET /definitions/{id} requests (default: 5 000 ms). */
+    getTimeoutMs?: number;
+    /** @deprecated Use postTimeoutMs / getTimeoutMs instead. Applied to GET requests when getTimeoutMs is absent. */
+    timeoutMs?: number;
+    useBatchAPI?: boolean;
+    enableHarvest?: boolean;
+  }) {
+    this.postTimeoutMs = options?.postTimeoutMs ?? DEFAULT_POST_TIMEOUT_MS;
+    this.getTimeoutMs = options?.getTimeoutMs ?? options?.timeoutMs ?? DEFAULT_GET_TIMEOUT_MS;
+    this.useBatchAPI = options?.useBatchAPI ?? true;
+    this.enableHarvest = options?.enableHarvest ?? false;
   }
 
   async processBatch(deps: string[]): Promise<string[]> {
@@ -172,7 +185,7 @@ export class ClearlyDefinedBackend implements LicenseBackend {
     try {
       logger.request('POST', `${url} (${coordinates.length} coordinates)`);
 
-      const batchResponse = await fetchDefinitionsBatch(coordinates, POST_TIMEOUT_MS);
+      const batchResponse = await fetchDefinitionsBatch(coordinates, this.postTimeoutMs);
       const duration = Date.now() - startTime;
 
       logger.response(200, url, duration);
@@ -249,7 +262,7 @@ export class ClearlyDefinedBackend implements LicenseBackend {
           logger.debug(`Retry ${attempt}/${maxRetries} for ${clearlyDefinedId}`);
         }
 
-        const def = await fetchDefinition(clearlyDefinedId, this.timeoutMs);
+        const def = await fetchDefinition(clearlyDefinedId, this.getTimeoutMs);
         const duration = Date.now() - startTime;
 
         const license = def ? extractLicense(def) : '';
@@ -345,7 +358,7 @@ export class ClearlyDefinedBackend implements LicenseBackend {
         batch.map(async (dep) => {
           try {
             // Check if already harvested
-            const harvested = await checkHarvested(dep.id, this.timeoutMs);
+            const harvested = await checkHarvested(dep.id, this.getTimeoutMs);
 
             if (harvested.length > 0) {
               logger.debug(`${dep.id}: already harvested (${harvested.length} tools)`);
@@ -354,7 +367,7 @@ export class ClearlyDefinedBackend implements LicenseBackend {
 
             // Request harvest
             logger.info(`${dep.id}: requesting harvest...`);
-            await requestHarvest(dep.id, this.timeoutMs);
+            await requestHarvest(dep.id, this.getTimeoutMs);
             return { status: 'requested' };
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
