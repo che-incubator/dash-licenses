@@ -170,9 +170,18 @@ export function identifierToCoordinate(identifier: string): string {
   return `npm/npmjs/-/${name}/${version}`;
 }
 
+/** Entry stored in the resolved dependency cache. */
+export interface CacheEntry {
+  /** SPDX license string from the .deps/*.md table row (e.g. "MIT"). */
+  license: string;
+  /** Resolved CQ value (e.g. "[clearlydefined](https://...)"). */
+  cq: string;
+}
+
 /**
  * Load already-resolved dependencies from the existing .deps/prod.md and
- * .deps/dev.md files and return them as a map of identifier → cq_value.
+ * .deps/dev.md files and return them as a map of
+ * identifier → { license, cq }.
  *
  * Only entries whose "Resolved CQs" column is non-empty are included.
  * Empty CQ cells mean the dependency is still unresolved and must be queried.
@@ -180,18 +189,24 @@ export function identifierToCoordinate(identifier: string): string {
 export function loadResolvedCache(
   prodMdPath: string,
   devMdPath: string,
-): Map<string, string> {
-  const cache = new Map<string, string>();
+): Map<string, CacheEntry> {
+  const cache = new Map<string, CacheEntry>();
   for (const filePath of [prodMdPath, devMdPath]) {
     if (!existsSync(filePath)) continue;
     const content = readFileSync(filePath, { encoding: 'utf8' as BufferEncoding });
-    const rowPattern = /^\| `([^`]+)` \| ([^|]+) \| (.+) \|$/gm;
+    // Match both plain-backtick and linked-name table row formats:
+    //   | `pkg@version` | license | cq |
+    //   | [`pkg@version`](url) | license | cq |
+    const rowPattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]+) \| (.+) \|$/gm;
     let match: RegExpExecArray | null;
     while ((match = rowPattern.exec(content)) !== null) {
       const identifier = match[1].trim();
+      const license = match[2].trim();
       const cq = match[3].trim();
-      if (cq) {
-        cache.set(identifier, cq);
+      // Only cache entries with an actual resolution — skip placeholders like
+      // "transitive dependency" that don't represent a real ClearlyDefined result.
+      if (cq && cq !== 'transitive dependency') {
+        cache.set(identifier, { license, cq });
       }
     }
   }

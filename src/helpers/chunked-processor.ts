@@ -15,7 +15,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import type { LicenseBackend } from '../backends/types';
 import { ClearlyDefinedBackend } from '../backends/clearlydefined-backend';
 import { JarBackend } from '../backends/jar-backend';
-import { sleep, parseNonEmptyLines, getErrorMessage, coordinateToIdentifier } from './utils';
+import { sleep, parseNonEmptyLines, getErrorMessage, coordinateToIdentifier, identifierToCoordinate, type CacheEntry } from './utils';
 import { logger } from './logger';
 
 /** Default maximum number of retry attempts for chunk processing */
@@ -52,12 +52,12 @@ export interface ChunkedProcessorOptions {
   backend?: LicenseBackend;
   /**
    * Pre-resolved cache from existing .deps/prod.md + .deps/dev.md.
-   * Keys are package identifiers (e.g. "express@4.18.0"); values are the
-   * resolved CQ string (e.g. "[clearlydefined](...)").
+   * Keys are package identifiers (e.g. "express@4.18.0"); values carry the
+   * SPDX license and resolved CQ string.
    * Coordinates present in the cache are written directly to the output file
    * without calling the API.  Omit or leave empty to query everything.
    */
-  cachedResolutions?: Map<string, string>;
+  cachedResolutions?: Map<string, CacheEntry>;
 }
 
 export class ChunkedDashLicensesProcessor {
@@ -115,16 +115,13 @@ export class ChunkedDashLicensesProcessor {
       for (const coord of allDependencies) {
         const id = coordinateToIdentifier(coord);
         if (id && cache.has(id)) {
-          // Reconstruct a DEPENDENCIES-format line from the cached CQ value.
-          // Format: coordinate, license, approved, clearlydefined
-          const cq = cache.get(id)!;
-          // Extract license from cq map if we stored it; otherwise use 'unknown'
-          // (processAndGenerateDocuments will read licence from the DEPENDENCIES file)
-          // We emit a minimal valid line — licence will be re-read from ClearlyDefined
-          // data already embedded in the link.  Use 'approved' status.
-          const licenseMatch = cq.match(/\[([A-Za-z0-9\-. +]+)\]/);
-          const license = licenseMatch ? licenseMatch[1] : 'unknown';
-          cachedLines.push(`${coord}, ${license}, approved, clearlydefined`);
+          // Reconstruct a DEPENDENCIES-format line from the cached entry.
+          // parseDependenciesFile expects ClearlyDefined coordinate format:
+          //   npm/npmjs/@scope/name/version, MIT, approved, clearlydefined
+          // so we convert the identifier back to a coordinate.
+          const entry = cache.get(id)!;
+          const cdCoord = identifierToCoordinate(id) || coord;
+          cachedLines.push(`${cdCoord}, ${entry.license}, approved, clearlydefined`);
         } else {
           depsToQuery.push(coord);
         }
