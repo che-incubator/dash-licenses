@@ -103,22 +103,48 @@ export interface ProcessingOptions {
 }
 
 /**
- * Parse an npm coordinate string into a package identifier.
+ * Parse a dependency coordinate or resolution string into a plain
+ * package identifier suitable for cache lookup.
  *
- * Coordinates use the ClearlyDefined format:
- *   npm/npmjs/-/express/4.18.0        → express@4.18.0
- *   npm/npmjs/@babel/core/7.0.0       → @babel/core@7.0.0
+ * Handles two input formats:
  *
- * Returns an empty string for non-npm coordinates or malformed input.
+ * 1. Yarn Berry resolution strings (from parseYarnLockfile):
+ *      express@npm:4.18.0              → express@4.18.0
+ *      @babel/core@npm:7.0.0          → @babel/core@7.0.0
+ *
+ * 2. ClearlyDefined coordinate strings (from npm/yarn1 parsers):
+ *      npm/npmjs/-/express/4.18.0     → express@4.18.0
+ *      npm/npmjs/@babel/core/7.0.0    → @babel/core@7.0.0
+ *
+ * Returns an empty string for unrecognised / malformed input.
  */
 export function coordinateToIdentifier(coordinate: string): string {
+  // Already a plain identifier: package@version
+  // e.g. express@4.18.0 or @babel/core@7.0.0 — used by yarn3 and npm processors
+  if (!coordinate.startsWith('npm/') && !coordinate.includes('@npm:')) {
+    const lastAt = coordinate.lastIndexOf('@');
+    if (lastAt > 0) return coordinate;
+  }
+
+  // Yarn Berry resolution: name@npm:version  (last @npm: wins for scoped pkgs)
+  const npmAt = coordinate.lastIndexOf('@npm:');
+  if (npmAt > 0) {
+    const name = coordinate.slice(0, npmAt);
+    const version = coordinate.slice(npmAt + 5); // skip '@npm:'
+    if (name && version) return `${name}@${version}`;
+  }
+
+  // ClearlyDefined coordinate: npm/npmjs/{scope}/{name}/{version}
   const parts = coordinate.split('/');
-  if (parts.length < 5 || parts[0] !== 'npm') return '';
-  const scope = parts[2];
-  const name = parts[3];
-  const version = parts.slice(4).join('/');
-  if (scope === '-') return `${name}@${version}`;
-  return `${scope}/${name}@${version}`;
+  if (parts.length >= 5 && parts[0] === 'npm') {
+    const scope = parts[2];
+    const name = parts[3];
+    const version = parts.slice(4).join('/');
+    if (scope === '-') return `${name}@${version}`;
+    return `${scope}/${name}@${version}`;
+  }
+
+  return '';
 }
 
 /**
