@@ -201,10 +201,11 @@ export function loadResolvedCache(
   for (const filePath of [prodMdPath, devMdPath]) {
     if (!existsSync(filePath)) continue;
     const content = readFileSync(filePath, { encoding: 'utf8' as BufferEncoding });
-    // Match both plain-backtick and linked-name table row formats:
-    //   | `pkg@version` | license | cq |
-    //   | [`pkg@version`](url) | license | cq |
-    const rowPattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]+) \| (.+) \|$/gm;
+    // Match table row formats (plain backtick or linked name; license may be empty):
+    //   | `pkg@version` | MIT | [clearlydefined](...) |
+    //   | [`pkg@version`](url) | MIT | [clearlydefined](...) |
+    //   | `pkg@version` |  | ecd.che |   ← empty license (EXCLUDED-sourced entries)
+    const rowPattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]*) \| (.+) \|$/gm;
     let match: RegExpExecArray | null;
     while ((match = rowPattern.exec(content)) !== null) {
       const identifier = match[1].trim();
