@@ -23,10 +23,18 @@ const POST_BATCH_SIZE = 100;
 const POST_CONCURRENCY = 2;
 /** Delay between POST batches (ms) */
 const POST_BATCH_DELAY_MS = 500;
-/** Default timeout for batch POST requests (ms) */
-const DEFAULT_POST_TIMEOUT_MS = 10000;
+/**
+ * Default timeout for batch POST /definitions requests (ms).
+ * ClearlyDefined batch POSTs occasionally take 15-25 s; 30 s gives enough
+ * headroom without waiting forever before falling back to GET.
+ */
+const DEFAULT_POST_TIMEOUT_MS = 30000;
 /** Default timeout for individual GET requests (ms) */
 const DEFAULT_GET_TIMEOUT_MS = 5000;
+/** Number of times to retry a failed batch POST before falling back to GET */
+const POST_RETRY_COUNT = 1;
+/** Delay before retrying a failed batch POST (ms) */
+const POST_RETRY_DELAY_MS = 2000;
 
 /** Legacy: Concurrency limit for individual GET requests */
 const GET_CONCURRENCY = 8;
@@ -170,75 +178,70 @@ export class ClearlyDefinedBackend implements LicenseBackend {
   /**
    * Fetch multiple definitions using POST /definitions
    */
+  /**
+   * Fetch a batch of coordinates via POST /definitions.
+   * Retries POST_RETRY_COUNT times on failure before falling back to
+   * individual GET requests.
+   */
   private async fetchBatch(coordinates: string[]): Promise<DepResult[]> {
     const startTime = Date.now();
     const url = 'https://api.clearlydefined.io/definitions';
 
-    try {
-      logger.request('POST', `${url} (${coordinates.length} coordinates)`);
-
-      const batchResponse = await fetchDefinitionsBatch(coordinates, this.postTimeoutMs);
-      const duration = Date.now() - startTime;
-
-      logger.response(200, url, duration);
-
-      const results: DepResult[] = [];
-      for (const coordinate of coordinates) {
-        const def = batchResponse[coordinate];
-
-        // Handle missing or empty definitions
-        if (!def || !def.licensed) {
-          logger.debug(`${coordinate}: not found or no license data`);
-          results.push({
-            id: coordinate,
-            license: '',
-            status: 'restricted',
-            source: 'notfound'
-          });
-          continue;
-        }
-
-        const license = extractLicense(def);
-        if (!license) {
-          results.push({
-            id: coordinate,
-            license: '',
-            status: 'restricted',
-            source: 'notfound'
-          });
-          continue;
-        }
-
-        const approved = isLicenseApproved(license);
-        logger.debug(`${coordinate}: ${license} → ${approved ? 'approved' : 'restricted'}`);
-
-        results.push({
-          id: coordinate,
-          license,
-          status: approved ? 'approved' : 'restricted',
-          source: 'clearlydefined'
-        });
+    for (let attempt = 0; attempt <= POST_RETRY_COUNT; attempt++) {
+      if (attempt > 0) {
+        logger.info(`Retrying batch POST (attempt ${attempt + 1}/${POST_RETRY_COUNT + 1}) after ${POST_RETRY_DELAY_MS} ms...`);
+        await sleep(POST_RETRY_DELAY_MS);
       }
-
-      return results;
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logger.response(500, url, duration);
-      logger.warn(`Batch POST failed: ${error}`);
-      logger.info(`Falling back to individual GET requests for ${coordinates.length} coordinates`);
-
-      // Fallback: retry each coordinate individually using GET with concurrency limit
-      const fallbackResults: DepResult[] = [];
-      for (let i = 0; i < coordinates.length; i += GET_CONCURRENCY) {
-        const batch = coordinates.slice(i, i + GET_CONCURRENCY);
-        const batchResults = await Promise.all(
-          batch.map(id => this.fetchOne(id))
-        );
-        fallbackResults.push(...batchResults);
+      try {
+        logger.request('POST', `${url} (${coordinates.length} coordinates)`);
+        const batchResponse = await fetchDefinitionsBatch(coordinates, this.postTimeoutMs);
+        const duration = Date.now() - startTime;
+        logger.response(200, url, duration);
+        return this.parseBatchResponse(coordinates, batchResponse);
+      } catch (err) {
+        logger.warn(`Batch POST failed (attempt ${attempt + 1}/${POST_RETRY_COUNT + 1}): ${err}`);
       }
-
-      return fallbackResults;
     }
+
+    // All POST attempts exhausted — fall back to individual GETs.
+    logger.info(`Falling back to individual GET requests for ${coordinates.length} coordinates`);
+    const fallbackResults: DepResult[] = [];
+    for (let i = 0; i < coordinates.length; i += GET_CONCURRENCY) {
+      const batch = coordinates.slice(i, i + GET_CONCURRENCY);
+      const batchResults = await Promise.all(batch.map(id => this.fetchOne(id)));
+      fallbackResults.push(...batchResults);
+    }
+    return fallbackResults;
+  }
+
+  /** Parse a batch POST response into DepResult entries. */
+  private parseBatchResponse(
+    coordinates: string[],
+    batchResponse: Record<string, import('./clearlydefined-client').ClearlyDefinedDefinition>,
+  ): DepResult[] {
+    const results: DepResult[] = [];
+    for (const coordinate of coordinates) {
+      const def = batchResponse[coordinate];
+      if (!def || !def.licensed) {
+        logger.debug(`${coordinate}: not found or no license data`);
+        results.push({ id: coordinate, license: '', status: 'restricted', source: 'notfound' });
+        continue;
+      }
+      const license = extractLicense(def);
+      if (!license) {
+        results.push({ id: coordinate, license: '', status: 'restricted', source: 'notfound' });
+        continue;
+      }
+      const approved = isLicenseApproved(license);
+      logger.debug(`${coordinate}: ${license} → ${approved ? 'approved' : 'restricted'}`);
+      results.push({
+        id: coordinate,
+        license,
+        status: approved ? 'approved' : 'restricted',
+        source: 'clearlydefined',
+      });
+    }
+    return results;
   }
 
   private async fetchOne(clearlyDefinedId: string, maxRetries = 3): Promise<DepResult> {

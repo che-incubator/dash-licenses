@@ -48,7 +48,7 @@ Options:
   --harvest      Request harvest for unresolved dependencies from ClearlyDefined
   --recheck             Bypass the .deps/prod.md + .deps/dev.md cache and re-query
                         ClearlyDefined for every dependency (default: cache is used)
-  --post-timeout <ms>   Timeout for batch POST /definitions requests (default: 10000 ms)
+  --post-timeout <ms>   Timeout for batch POST /definitions requests (default: 30000 ms)
   --get-timeout <ms>    Timeout for individual GET /definitions/{id} requests (default: 5000 ms)
   --jar <path>          Optional path to Eclipse dash-licenses.jar for fallback on unresolved dev deps
   --help                Show this message
