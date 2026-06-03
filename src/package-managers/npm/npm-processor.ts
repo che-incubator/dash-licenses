@@ -76,7 +76,6 @@ export class NpmProcessor extends PackageManagerBase {
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
         debug: this.options.debug,
-        enableHarvest: this.options.harvest,
         ...(this.options.postTimeoutMs !== undefined ? { postTimeoutMs: this.options.postTimeoutMs } : {}),
         ...(this.options.getTimeoutMs !== undefined ? { getTimeoutMs: this.options.getTimeoutMs } : {}),
         ...(cachedResolutions ? { cachedResolutions } : {}),

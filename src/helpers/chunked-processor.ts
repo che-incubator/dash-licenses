@@ -34,8 +34,6 @@ export interface ChunkedProcessorOptions {
   batchSize: number;
   outputFile: string;
   debug?: boolean;
-  /** Enable harvest request for unresolved dependencies */
-  enableHarvest?: boolean;
   maxRetries?: number;
   retryDelayMs?: number;
   /**
@@ -79,7 +77,6 @@ export class ChunkedDashLicensesProcessor {
             options.debug
           )
         : new ClearlyDefinedBackend({
-            enableHarvest: options.enableHarvest ?? false,
             ...(options.postTimeoutMs !== undefined ? { postTimeoutMs: options.postTimeoutMs } : {}),
             ...(options.getTimeoutMs !== undefined ? { getTimeoutMs: options.getTimeoutMs } : {}),
           }));

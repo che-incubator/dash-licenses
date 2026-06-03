@@ -10,7 +10,7 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-import { fetchDefinition, fetchDefinitionsBatch, extractLicense, checkHarvested, requestHarvest } from './clearlydefined-client';
+import { fetchDefinition, fetchDefinitionsBatch, extractLicense } from './clearlydefined-client';
 import { isLicenseApproved } from './license-policy';
 import { toClearlyDefinedId } from './coordinate-utils';
 import { sleep } from '../helpers/utils';
@@ -41,7 +41,6 @@ export class ClearlyDefinedBackend implements LicenseBackend {
   private readonly postTimeoutMs: number;
   private readonly getTimeoutMs: number;
   private readonly useBatchAPI: boolean;
-  private readonly enableHarvest: boolean;
 
   constructor(options?: {
     /** Timeout for batch POST /definitions requests (default: 10 000 ms). */
@@ -51,12 +50,10 @@ export class ClearlyDefinedBackend implements LicenseBackend {
     /** @deprecated Use postTimeoutMs / getTimeoutMs instead. Applied to GET requests when getTimeoutMs is absent. */
     timeoutMs?: number;
     useBatchAPI?: boolean;
-    enableHarvest?: boolean;
   }) {
     this.postTimeoutMs = options?.postTimeoutMs ?? DEFAULT_POST_TIMEOUT_MS;
     this.getTimeoutMs = options?.getTimeoutMs ?? options?.timeoutMs ?? DEFAULT_GET_TIMEOUT_MS;
     this.useBatchAPI = options?.useBatchAPI ?? true;
-    this.enableHarvest = options?.enableHarvest ?? false;
   }
 
   async processBatch(deps: string[]): Promise<string[]> {
@@ -88,11 +85,6 @@ export class ClearlyDefinedBackend implements LicenseBackend {
       : await this.processBatchGET(ids);
 
     results.push(...fetchedResults);
-
-    // If harvest is enabled, check and request harvest for notfound dependencies
-    if (this.enableHarvest) {
-      await this.processHarvest(results);
-    }
 
     const duration = Date.now() - startTime;
     const approved = results.filter(r => r.status === 'approved').length;
@@ -329,83 +321,6 @@ export class ClearlyDefinedBackend implements LicenseBackend {
       status: 'restricted',
       source: 'error'
     };
-  }
-
-  /**
-   * Check and request harvest for dependencies that were not found.
-   * Only processes dependencies with source 'notfound' or 'error'.
-   * Uses batched concurrency to avoid overwhelming the API.
-   */
-  /**
-   * Two-phase harvest:
-   *
-   * Phase 1 — check (awaited, batched):
-   *   Query GET /harvest/{id} for every unresolved dependency to see which
-   *   ones have already been harvested by a previous run.
-   *
-   * Phase 2 — request (fire-and-forget):
-   *   POST /harvest for the remaining ones without awaiting the responses.
-   *   ClearlyDefined queues the job server-side; the HTTP response only
-   *   acknowledges receipt and carries no useful data, so there is no reason
-   *   to block on it.  Errors are logged at debug level and the caller
-   *   returns immediately.
-   */
-  private async processHarvest(results: DepResult[]): Promise<void> {
-    const notfound = results.filter(r => r.source === 'notfound' || r.source === 'error');
-    if (notfound.length === 0) return;
-
-    logger.info(`Checking harvest status for ${notfound.length} unresolved dependencies...`);
-
-    // ── Phase 1: check (await all GET requests in batches) ──────────────────
-    let alreadyHarvested = 0;
-    const toRequest: DepResult[] = [];
-    const HARVEST_CONCURRENCY = GET_CONCURRENCY;
-
-    for (let i = 0; i < notfound.length; i += HARVEST_CONCURRENCY) {
-      const batch = notfound.slice(i, i + HARVEST_CONCURRENCY);
-
-      const checkResults = await Promise.all(
-        batch.map(async (dep) => {
-          try {
-            const harvested = await checkHarvested(dep.id, this.getTimeoutMs);
-            if (harvested.length > 0) {
-              logger.debug(`${dep.id}: already harvested (${harvested.length} tools)`);
-              return { dep, needsRequest: false };
-            }
-            return { dep, needsRequest: true };
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
-            logger.debug(`${dep.id}: harvest check failed - ${msg}`);
-            return { dep, needsRequest: true };
-          }
-        })
-      );
-
-      for (const { dep, needsRequest } of checkResults) {
-        if (needsRequest) toRequest.push(dep);
-        else alreadyHarvested++;
-      }
-
-      if (i + HARVEST_CONCURRENCY < notfound.length) {
-        await sleep(GET_BATCH_DELAY_MS);
-      }
-    }
-
-    // ── Phase 2: request (fire-and-forget POST) ──────────────────────────────
-    for (const dep of toRequest) {
-      logger.info(`${dep.id}: requesting harvest...`);
-      requestHarvest(dep.id, this.getTimeoutMs).catch((error) => {
-        const msg = error instanceof Error ? error.message : String(error);
-        logger.debug(`${dep.id}: harvest POST failed - ${msg}`);
-      });
-    }
-
-    if (toRequest.length > 0) {
-      logger.info(`Harvest requested for ${toRequest.length} dependencies (${alreadyHarvested} already harvested)`);
-      logger.info('Note: Harvested data may take several minutes to process. Re-run the tool later to check for updates.');
-    } else if (alreadyHarvested > 0) {
-      logger.info(`All ${alreadyHarvested} unresolved dependencies are already being harvested`);
-    }
   }
 
   private toDependenciesLine(r: DepResult): string {

@@ -100,6 +100,13 @@ export function getErrorMessage(error: unknown): string {
 export interface ProcessingOptions {
   harvest?: boolean;
   check?: boolean;
+  /**
+   * When provided and harvest is true, called with the list of **direct**
+   * unresolved dependency identifiers (the ones that end up in problems.md).
+   * Transitive unresolved deps (auto-added to EXCLUDED) are excluded.
+   * The function should be fire-and-forget; the caller does not await it.
+   */
+  harvestFn?: (identifiers: string[]) => Promise<void>;
 }
 
 /**
@@ -565,6 +572,21 @@ export class PackageManagerUtils {
         }
         // Suppress transitive deps from UNRESOLVED section and problems.md
         allTransitive.forEach(d => depsToCQ.set(d, 'transitive dependency'));
+      }
+
+      // Trigger harvest for DIRECT unresolved deps only (those that will
+      // appear in problems.md). Transitive deps are excluded — they are
+      // handled by EXCLUDED files and do not need ClearlyDefined to harvest.
+      if (isHarvest && options?.harvestFn) {
+        const directUnresolved = [
+          ...stillUnresolvedProd.filter(d => isDirectPackage(d)),
+          ...stillUnresolvedDev.filter(d => isDirectPackage(d)),
+        ];
+        if (directUnresolved.length > 0) {
+          // Fire-and-forget: harvestFn is async but we don't await it so
+          // the tool output is not blocked on harvest HTTP round-trips.
+          void options.harvestFn(directUnresolved);
+        }
       }
 
       // Generate production dependencies document
