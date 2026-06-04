@@ -56,6 +56,16 @@ export interface ChunkedProcessorOptions {
    * without calling the API.  Omit or leave empty to query everything.
    */
   cachedResolutions?: Map<string, CacheEntry>;
+  /**
+   * Set of production dependency identifiers (e.g. "express@4.18.0").
+   * Used to classify cache misses as prod vs dev in log output.
+   */
+  prodIdentifiers?: Set<string>;
+  /**
+   * Set of development dependency identifiers.
+   * Used to classify cache misses as prod vs dev in log output.
+   */
+  devIdentifiers?: Set<string>;
 }
 
 export class ChunkedDashLicensesProcessor {
@@ -127,7 +137,37 @@ export class ChunkedDashLicensesProcessor {
         logger.info(`Cache hit: ${cachedLines.length} dependencies skipped (already resolved).`);
       }
       if (depsToQuery.length > 0) {
-        logger.info(`Cache miss: ${depsToQuery.length} new/unresolved dependencies to query.`);
+        // Build a detailed breakdown so the log is actionable.
+        const prodSet = this.options.prodIdentifiers;
+        const devSet = this.options.devIdentifiers;
+        const cacheNameSet = new Set(
+          [...(cache?.keys() ?? [])].map(id => id.substring(0, id.lastIndexOf('@')))
+        );
+
+        let prod = 0, dev = 0, both = 0, versionBump = 0, brandNew = 0;
+        for (const id of depsToQuery) {
+          const isProd = prodSet?.has(id) ?? false;
+          const isDev  = devSet?.has(id) ?? false;
+          if (isProd && isDev) both++;
+          else if (isProd) prod++;
+          else if (isDev) dev++;
+
+          const pkgName = id.substring(0, id.lastIndexOf('@'));
+          if (cacheNameSet.has(pkgName)) versionBump++;
+          else brandNew++;
+        }
+
+        const parts: string[] = [];
+        if (prodSet && devSet) {
+          if (prod > 0)  parts.push(`${prod} prod`);
+          if (dev > 0)   parts.push(`${dev} dev`);
+          if (both > 0)  parts.push(`${both} prod+dev`);
+        }
+        if (versionBump > 0) parts.push(`${versionBump} version bump${versionBump > 1 ? 's' : ''}`);
+        if (brandNew > 0)    parts.push(`${brandNew} new package${brandNew > 1 ? 's' : ''}`);
+
+        const detail = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+        logger.info(`Cache miss: ${depsToQuery.length} dependencies to query${detail}.`);
       }
     }
 
