@@ -198,6 +198,8 @@ export function loadResolvedCache(
   devMdPath: string,
 ): Map<string, CacheEntry> {
   const cache = new Map<string, CacheEntry>();
+
+  // ── prod.md / dev.md (3-column: identifier | license | cq) ─────────────
   for (const filePath of [prodMdPath, devMdPath]) {
     if (!existsSync(filePath)) continue;
     const content = readFileSync(filePath, { encoding: 'utf8' as BufferEncoding });
@@ -218,6 +220,28 @@ export function loadResolvedCache(
       }
     }
   }
+
+  // ── EXCLUDED files (2-column: identifier | cq) ──────────────────────────
+  // Deps in EXCLUDED are already classified (transitive or manually excluded).
+  // Cache them so subsequent runs skip the ClearlyDefined API call entirely.
+  const dir = path.dirname(prodMdPath);
+  const excludedProd = path.join(dir, 'EXCLUDED', 'prod.md');
+  const excludedDev  = path.join(dir, 'EXCLUDED', 'dev.md');
+  for (const filePath of [excludedProd, excludedDev]) {
+    if (!existsSync(filePath)) continue;
+    const content = readFileSync(filePath, { encoding: 'utf8' as BufferEncoding });
+    // EXCLUDED format: | `identifier` | cq_value |   (no license column)
+    const excludedPattern = /^\| `([^`]+)` \| ([^|]+) \|$/gm;
+    let match: RegExpExecArray | null;
+    while ((match = excludedPattern.exec(content)) !== null) {
+      const identifier = match[1].trim();
+      const cq = match[2].trim();
+      if (identifier && cq) {
+        cache.set(identifier, { license: '', cq });
+      }
+    }
+  }
+
   return cache;
 }
 
@@ -559,13 +583,19 @@ export class PackageManagerUtils {
 
       const allTransitive = [...transitiveProd, ...transitiveDev];
       if (allTransitive.length > 0) {
-        if (isHarvest) {
+        if (!isCheck) {
+          // Always write transitive deps to EXCLUDED in generate mode so that
+          // subsequent runs can skip the ClearlyDefined API call for them.
+          // Without this, every run re-queries the same transitive deps.
           this.appendTransitiveExcludes(paths.EXCLUDED_PROD_MD, transitiveProd, paths.ENCODING);
           this.appendTransitiveExcludes(paths.EXCLUDED_DEV_MD, transitiveDev, paths.ENCODING);
-        } else {
-          const suggestion = isCheck
-            ? 'Run with --harvest to automatically add them, or update .deps/EXCLUDED manually.'
-            : 'Run with --harvest to automatically add them to .deps/EXCLUDED.';
+        }
+        if (!isHarvest && !isCheck) {
+          console.log(`\nNote: ${allTransitive.length} UNRESOLVED transitive dep(s) added to .deps/EXCLUDED.`);
+          console.log('  Run with --recheck to re-query them from scratch.');
+          console.log();
+        } else if (isCheck) {
+          const suggestion = 'Run without --check to persist them to .deps/EXCLUDED.';
           console.log(`\nNote: ${allTransitive.length} UNRESOLVED transitive dep(s) found. ${suggestion}`);
           console.log('  .deps/EXCLUDED should be updated with the next transitive deps:');
           allTransitive.forEach(d => console.log(`    - ${d}`));

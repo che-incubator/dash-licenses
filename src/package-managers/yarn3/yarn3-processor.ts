@@ -80,13 +80,25 @@ export class Yarn3Processor extends PackageManagerBase {
     console.log('Done.');
     console.log();
 
-    // 3. Write dep lists for bump-deps (lockfile format)
+    // 3. Write dep lists for bump-deps (lockfile format).
+    // Some deps appear in lockfileResult.all but in neither .prod nor .dev
+    // (transitive deps of optional packages or graph-traversal gaps). Classify
+    // them as dev so they are written to dev.md and picked up by the cache on
+    // subsequent runs — otherwise they would be re-queried from ClearlyDefined
+    // on every run without ever being persisted.
+    const prodSet = new Set(lockfileResult.prod);
+    const devSet = new Set(lockfileResult.dev);
+    const uncategorized = lockfileResult.all.filter(d => !prodSet.has(d) && !devSet.has(d));
+    const devDependencies = uncategorized.length > 0
+      ? [...lockfileResult.dev, ...uncategorized]
+      : lockfileResult.dev;
+
     const depsInfoPath = path.join(this.env.TMP_DIR, 'yarn3-deps-info.json');
     writeFileSync(
       depsInfoPath,
       JSON.stringify({
         dependencies: lockfileResult.prod,
-        devDependencies: lockfileResult.dev
+        devDependencies,
       }),
       'utf8'
     );

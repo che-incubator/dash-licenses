@@ -122,13 +122,18 @@ export class ChunkedDashLicensesProcessor {
       for (const coord of allDependencies) {
         const id = coordinateToIdentifier(coord);
         if (id && cache.has(id)) {
-          // Reconstruct a DEPENDENCIES-format line from the cached entry.
-          // parseDependenciesFile expects ClearlyDefined coordinate format:
-          //   npm/npmjs/@scope/name/version, MIT, approved, clearlydefined
-          // so we convert the identifier back to a coordinate.
           const entry = cache.get(id)!;
           const cdCoord = identifierToCoordinate(id) || coord;
-          cachedLines.push(`${cdCoord}, ${entry.license}, approved, clearlydefined`);
+          if (entry.license) {
+            // Resolved by ClearlyDefined — write as approved so parseDependenciesFile
+            // adds it to depsToCQ with the clearlydefined link.
+            cachedLines.push(`${cdCoord}, ${entry.license}, approved, clearlydefined`);
+          } else {
+            // Sourced from EXCLUDED (transitive dep or manual exclusion, no license).
+            // Write as restricted so parseDependenciesFile ignores it; the dep is
+            // handled by processExcludedDependencies reading the EXCLUDED files.
+            cachedLines.push(`${cdCoord}, unknown, restricted, excluded`);
+          }
         } else {
           depsToQuery.push(coord);
         }
