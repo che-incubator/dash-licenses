@@ -48,7 +48,8 @@ export async function recheckAndCleanExcluded(
 
     const content = readFileSync(filePath, 'utf8');
     const toVerify: Array<{ id: string; coord: string }> = [];
-    const tablePattern = /^\| `([^`]+)` \| ([^|]+) \|$/gm;
+    // Matches both plain (| `pkg@v` | cq |) and linked-name (| [`pkg@v`](url) | cq |) rows.
+    const tablePattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]+) \|$/gm;
     let m: RegExpExecArray | null;
     while ((m = tablePattern.exec(content)) !== null) {
       const id = m[1].trim();

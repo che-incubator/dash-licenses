@@ -161,14 +161,16 @@ export class ChunkedDashLicensesProcessor {
         );
 
         let prod = 0, dev = 0, both = 0, versionBump = 0, brandNew = 0;
-        for (const id of depsToQuery) {
+        for (const coord of depsToQuery) {
+          const id = coordinateToIdentifier(coord) || coord;
           const isProd = prodSet?.has(id) ?? false;
           const isDev  = devSet?.has(id) ?? false;
           if (isProd && isDev) both++;
           else if (isProd) prod++;
           else if (isDev) dev++;
 
-          const pkgName = id.substring(0, id.lastIndexOf('@'));
+          const atIdx = id.lastIndexOf('@');
+          const pkgName = atIdx > 0 ? id.substring(0, atIdx) : id;
           if (cacheNameSet.has(pkgName)) versionBump++;
           else brandNew++;
         }
@@ -217,8 +219,9 @@ export class ChunkedDashLicensesProcessor {
 
     // If all deps are cached, write the cached lines and we're done.
     if (depsToQuery.length === 0) {
-      writeFileSync(this.options.outputFile, cachedLines.join('\n') + (cachedLines.length ? '\n' : ''));
-      logger.success(`Merged ${cachedLines.length} unique dependencies into ${this.options.outputFile}`);
+      const sortedCached = Array.from(new Set(cachedLines)).sort();
+      writeFileSync(this.options.outputFile, sortedCached.join('\n') + (sortedCached.length ? '\n' : ''), 'utf8');
+      logger.success(`Merged ${sortedCached.length} unique dependencies into ${this.options.outputFile}`);
       logger.success(`Successfully processed all ${allDependencies.length} dependencies (all from cache)`);
       logger.duration('Total processing time', Date.now() - startTime);
       return;

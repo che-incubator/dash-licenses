@@ -210,6 +210,9 @@ export class ClearlyDefinedBackend implements LicenseBackend {
       const batch = coordinates.slice(i, i + GET_CONCURRENCY);
       const batchResults = await Promise.all(batch.map(id => this.fetchOne(id)));
       fallbackResults.push(...batchResults);
+      if (i + GET_CONCURRENCY < coordinates.length) {
+        await sleep(GET_BATCH_DELAY_MS);
+      }
     }
     return fallbackResults;
   }

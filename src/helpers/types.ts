@@ -100,12 +100,24 @@ export function parseEnvironment(overrides?: Partial<Environment>): Environment 
  * Pass overrides for library usage.
  */
 export function parseOptions(overrides?: Partial<Options>): Options {
-  const opts: Options = {
-    check: process.argv.includes('--check'),
-    debug: process.argv.includes('--debug'),
-    harvest: process.argv.includes('--harvest'),
-    recheck: process.argv.includes('--recheck'),
+  const args = process.argv.slice(2);
+  const readPositiveIntArg = (flag: string): number | undefined => {
+    const idx = args.indexOf(flag);
+    if (idx === -1 || !args[idx + 1]) return undefined;
+    const n = parseInt(args[idx + 1], 10);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
   };
+
+  const opts: Options = {
+    check: args.includes('--check'),
+    debug: args.includes('--debug'),
+    harvest: args.includes('--harvest'),
+    recheck: args.includes('--recheck'),
+  };
+  const postTimeout = readPositiveIntArg('--post-timeout');
+  const getTimeout = readPositiveIntArg('--get-timeout');
+  if (postTimeout !== undefined) opts.postTimeoutMs = postTimeout;
+  if (getTimeout !== undefined) opts.getTimeoutMs = getTimeout;
   return overrides ? { ...opts, ...overrides } : opts;
 }
 

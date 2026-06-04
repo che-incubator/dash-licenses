@@ -100,6 +100,8 @@ export function getErrorMessage(error: unknown): string {
 export interface ProcessingOptions {
   harvest?: boolean;
   check?: boolean;
+  /** GET timeout (ms) forwarded to triggerHarvestAsync. Defaults to 5 000. */
+  getTimeoutMs?: number;
   /**
    * When provided and harvest is true, called with the list of **direct**
    * unresolved dependency identifiers (the ones that end up in problems.md).
@@ -170,6 +172,7 @@ export function identifierToCoordinate(identifier: string): string {
   if (!version) return '';
   if (name.startsWith('@')) {
     const slashIdx = name.indexOf('/');
+    if (slashIdx <= 1 || slashIdx === name.length - 1) return '';
     const scope = name.slice(0, slashIdx);
     const pkg = name.slice(slashIdx + 1);
     return `npm/npmjs/${scope}/${pkg}/${version}`;
@@ -616,7 +619,9 @@ export class PackageManagerUtils {
         if (directUnresolved.length > 0) {
           // Fire-and-forget: harvestFn is async but we don't await it so
           // the tool output is not blocked on harvest HTTP round-trips.
-          void options.harvestFn(directUnresolved);
+          void options.harvestFn([...new Set(directUnresolved)]).catch((err: unknown) => {
+            logger.warn(`Harvest trigger failed: ${getErrorMessage(err)}`);
+          });
         }
       }
 

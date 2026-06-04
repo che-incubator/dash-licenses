@@ -81,7 +81,7 @@ npx @eclipse-che/license-tool --jar /path/to/dash-licenses.jar
 | `--batch <n>` | Batch size for ClearlyDefined API requests | `500` |
 | `--harvest` | Request harvest for unresolved deps from ClearlyDefined | `false` |
 | `--recheck` | Bypass the `.deps/` cache and re-query ClearlyDefined for every dependency | `false` |
-| `--post-timeout <ms>` | Timeout for batch POST `/definitions` requests | `10000` ms |
+| `--post-timeout <ms>` | Timeout for batch POST `/definitions` requests | `30000` ms |
 | `--get-timeout <ms>` | Timeout for individual GET `/definitions/{id}` requests | `5000` ms |
 | `--jar <path>` | Path to Eclipse `dash-licenses.jar` for fallback on unresolved dev deps | — |
 | `--debug` | Copy tmp files for inspection | `false` |
@@ -186,6 +186,9 @@ Generated in `.deps/`:
 | `check` | `boolean` | `false` | Check only — do not write any files |
 | `debug` | `boolean` | `false` | Copy tmp directory for inspection |
 | `harvest` | `boolean` | `false` | Request harvest for unresolved dependencies from ClearlyDefined |
+| `recheck` | `boolean` | `false` | Bypass the `.deps/` cache and re-query ClearlyDefined for every dependency |
+| `postTimeout` | `number` | `30000` | Timeout (ms) for batch POST `/definitions` requests |
+| `getTimeout` | `number` | `5000` | Timeout (ms) for individual GET `/definitions/{id}` requests |
 | `jarPath` | `string` | — | Path to Eclipse `dash-licenses.jar`; runs JAR fallback for unresolved dev deps, adds approved items to `EXCLUDED`, and regenerates `dev.md` |
 
 Returns `Promise<{ exitCode: 0 | 1; error?: string }>`.

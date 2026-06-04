@@ -141,7 +141,7 @@ export class DependencyParser {
             // (extractLicenseInfo). EXCLUDED-cached entries write 'unknown' as
             // a placeholder; preserve the existing value in that case.
             const incomingLicense = license ? license.trim() : '';
-            if (incomingLicense && incomingLicense !== 'unknown') {
+            if (incomingLicense && incomingLicense.toLowerCase() !== 'unknown') {
               allLicenses.set(identifier, { License: incomingLicense });
             } else if (!allLicenses.has(identifier)) {
               allLicenses.set(identifier, { License: incomingLicense });

@@ -120,7 +120,9 @@ export class YarnProcessor extends PackageManagerBase {
     console.log('Checking dependencies for restrictions to use...');
     try {
       const processor = new YarnDependencyProcessor();
-      processor.process({ harvest: this.options.harvest, check: this.options.check });
+      const procOpts: import('../../helpers/utils').ProcessingOptions = { harvest: this.options.harvest, check: this.options.check };
+      if (this.options.getTimeoutMs !== undefined) procOpts.getTimeoutMs = this.options.getTimeoutMs;
+      processor.process(procOpts);
       return 0;
     } catch (error) {
       // Error already logged by the processor

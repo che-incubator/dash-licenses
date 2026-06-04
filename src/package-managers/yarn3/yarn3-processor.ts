@@ -125,7 +125,7 @@ export class Yarn3Processor extends PackageManagerBase {
         outputFile: depsFilePath,
         debug: this.options.debug,
         prodIdentifiers: new Set(lockfileResult.prod),
-        devIdentifiers: new Set(lockfileResult.dev),
+        devIdentifiers: new Set(devDependencies),
         ...(this.options.postTimeoutMs !== undefined ? { postTimeoutMs: this.options.postTimeoutMs } : {}),
         ...(this.options.getTimeoutMs !== undefined ? { getTimeoutMs: this.options.getTimeoutMs } : {}),
         ...(cachedResolutions ? { cachedResolutions } : {}),
@@ -147,7 +147,9 @@ export class Yarn3Processor extends PackageManagerBase {
     console.log('Checking dependencies for restrictions to use...');
     try {
       const processor = new Yarn3DependencyProcessor();
-      processor.process({ harvest: this.options.harvest, check: this.options.check });
+      const procOpts: import('../../helpers/utils').ProcessingOptions = { harvest: this.options.harvest, check: this.options.check };
+      if (this.options.getTimeoutMs !== undefined) procOpts.getTimeoutMs = this.options.getTimeoutMs;
+      processor.process(procOpts);
       return 0;
     } catch (error) {
       // Error already logged by the processor

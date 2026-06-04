@@ -77,7 +77,7 @@ export class Yarn3DependencyProcessor {
 
       const processOptions: ProcessingOptions = { ...options };
       if (options?.harvest) {
-        processOptions.harvestFn = (ids: string[]) => triggerHarvestAsync(ids, 5000);
+        processOptions.harvestFn = (ids: string[]) => triggerHarvestAsync(ids, options.getTimeoutMs ?? 5000);
       }
 
       PackageManagerUtils.processAndGenerateDocuments(
