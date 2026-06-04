@@ -75,16 +75,17 @@ export class Yarn3DependencyProcessor {
         this.allDependencies.set(pkg, this.extractLicenseInfo(pkg));
       });
 
-      const harvestFn = options?.harvest
-        ? (ids: string[]) => triggerHarvestAsync(ids, 5000)
-        : undefined;
+      const processOptions: ProcessingOptions = { ...options };
+      if (options?.harvest) {
+        processOptions.harvestFn = (ids: string[]) => triggerHarvestAsync(ids, 5000);
+      }
 
       PackageManagerUtils.processAndGenerateDocuments(
         prodDeps,
         devDeps,
         this.allDependencies,
         this.paths,
-        { ...options, harvestFn },
+        processOptions,
       );
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';

@@ -99,16 +99,17 @@ export class NpmDependencyProcessor {
       });
 
       // Process and generate documents
-      const harvestFn = options?.harvest
-        ? (ids: string[]) => triggerHarvestAsync(ids, 5000)
-        : undefined;
+      const processOptions: ProcessingOptions = { ...options };
+      if (options?.harvest) {
+        processOptions.harvestFn = (ids: string[]) => triggerHarvestAsync(ids, 5000);
+      }
 
       PackageManagerUtils.processAndGenerateDocuments(
         prodDeps,
         devDeps,
         this.allDependencies,
         this.paths,
-        { ...options, harvestFn },
+        processOptions,
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

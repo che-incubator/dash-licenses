@@ -136,9 +136,16 @@ export class DependencyParser {
               identifier = `${name}@${version}`;
             }
             
-            allLicenses.set(identifier, {
-              License: license ? license.trim() : ''
-            });
+            // Don't overwrite a real license with 'unknown' or empty —
+            // allLicenses may already have the correct value from node_modules
+            // (extractLicenseInfo). EXCLUDED-cached entries write 'unknown' as
+            // a placeholder; preserve the existing value in that case.
+            const incomingLicense = license ? license.trim() : '';
+            if (incomingLicense && incomingLicense !== 'unknown') {
+              allLicenses.set(identifier, { License: incomingLicense });
+            } else if (!allLicenses.has(identifier)) {
+              allLicenses.set(identifier, { License: incomingLicense });
+            }
           }
         }
       });

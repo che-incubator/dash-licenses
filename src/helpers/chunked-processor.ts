@@ -116,6 +116,9 @@ export class ChunkedDashLicensesProcessor {
     const cache = this.options.cachedResolutions;
     let depsToQuery = allDependencies;
     const cachedLines: string[] = [];
+    // EXCLUDED entries whose CQ is a ClearlyDefined link — verify via the API so
+    // they can be auto-removed from EXCLUDED if still approved.
+    const toVerify: string[] = [];
 
     if (cache && cache.size > 0) {
       depsToQuery = [];
@@ -125,21 +128,29 @@ export class ChunkedDashLicensesProcessor {
           const entry = cache.get(id)!;
           const cdCoord = identifierToCoordinate(id) || coord;
           if (entry.license) {
-            // Resolved by ClearlyDefined — write as approved so parseDependenciesFile
-            // adds it to depsToCQ with the clearlydefined link.
+            // Resolved by ClearlyDefined (prod.md/dev.md source) — write as approved.
             cachedLines.push(`${cdCoord}, ${entry.license}, approved, clearlydefined`);
+          } else if (entry.cq.includes('clearlydefined.io')) {
+            // EXCLUDED entry whose CQ is a ClearlyDefined link — send to the API to
+            // confirm it is still approved.  If it comes back approved,
+            // parseDependenciesFile detects it as an "unused exclude" and
+            // processAndGenerateDocuments removes it from the EXCLUDED file.
+            toVerify.push(cdCoord);
           } else {
-            // Sourced from EXCLUDED (transitive dep or manual exclusion, no license).
-            // Write as restricted so parseDependenciesFile ignores it; the dep is
-            // handled by processExcludedDependencies reading the EXCLUDED files.
+            // ecd.che, transitive dependency, or other non-ClearlyDefined exclusion.
+            // Write as restricted; processExcludedDependencies handles it.
             cachedLines.push(`${cdCoord}, unknown, restricted, excluded`);
           }
         } else {
           depsToQuery.push(coord);
         }
       }
-      if (cachedLines.length > 0) {
-        logger.info(`Cache hit: ${cachedLines.length} dependencies skipped (already resolved).`);
+      const directHits = cachedLines.length;
+      if (directHits > 0 || toVerify.length > 0) {
+        const verifyNote = toVerify.length > 0
+          ? ` (verifying ${toVerify.length} EXCLUDED entr${toVerify.length !== 1 ? 'ies' : 'y'} via API)`
+          : '';
+        logger.info(`Cache hit: ${directHits + toVerify.length} dependencies skipped${verifyNote}.`);
       }
       if (depsToQuery.length > 0) {
         // Build a detailed breakdown so the log is actionable.
@@ -173,6 +184,34 @@ export class ChunkedDashLicensesProcessor {
 
         const detail = parts.length > 0 ? ` (${parts.join(', ')})` : '';
         logger.info(`Cache miss: ${depsToQuery.length} dependencies to query${detail}.`);
+      }
+    }
+
+    // Verify EXCLUDED entries that carry a ClearlyDefined CQ link.
+    // Entries confirmed as approved are written with approved status so that
+    // parseDependenciesFile flags them as unused excludes and
+    // processAndGenerateDocuments auto-removes them from the EXCLUDED files.
+    if (toVerify.length > 0) {
+      try {
+        const verifiedLines = await this.backend.processBatch(toVerify);
+        let autoCleanCount = 0;
+        for (const vLine of verifiedLines) {
+          if (vLine.includes(', approved,')) {
+            cachedLines.push(vLine);
+            autoCleanCount++;
+          } else {
+            const vCoord = vLine.split(',')[0].trim();
+            cachedLines.push(`${vCoord}, unknown, restricted, excluded`);
+          }
+        }
+        if (autoCleanCount > 0) {
+          logger.info(`EXCLUDED verify: ${autoCleanCount}/${toVerify.length} entr${autoCleanCount !== 1 ? 'ies' : 'y'} approved — will be removed from EXCLUDED.`);
+        }
+      } catch (err) {
+        logger.warn(`Could not verify EXCLUDED entries: ${getErrorMessage(err)}. Keeping in EXCLUDED.`);
+        for (const coord of toVerify) {
+          cachedLines.push(`${coord}, unknown, restricted, excluded`);
+        }
       }
     }
 

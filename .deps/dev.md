@@ -398,7 +398,7 @@
 | `prompts@2.4.2` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/prompts/2.4.2) |
 | `punycode@2.3.1` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/punycode/2.3.1) |
 | `pure-rand@6.1.0` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/pure-rand/6.1.0) |
-| `qs@6.14.2` | BSD-3-Clause | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/qs/6.14.2) |
+| [`qs@6.15.2`](https://github.com/ljharb/qs) | BSD-3-Clause | transitive dependency |
 | `react-is@18.3.1` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/react-is/18.3.1) |
 | `rechoir@0.8.0` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/rechoir/0.8.0) |
 | `require-directory@2.1.1` | MIT | [clearlydefined](https://clearlydefined.io/definitions/npm/npmjs/-/require-directory/2.1.1) |
