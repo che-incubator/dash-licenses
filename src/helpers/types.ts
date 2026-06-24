@@ -15,7 +15,6 @@
  */
 export interface LicenseInfo {
   License: string;
-  URL?: string;
 }
 
 /**

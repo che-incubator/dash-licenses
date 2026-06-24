@@ -57,20 +57,9 @@ export class NpmDependencyProcessor {
         const pkgJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
         
         if (pkgJson.license) {
-          licenseInfo.License = typeof pkgJson.license === 'string' 
-            ? pkgJson.license 
+          licenseInfo.License = typeof pkgJson.license === 'string'
+            ? pkgJson.license
             : pkgJson.license.type || '';
-        }
-        
-        if (pkgJson.homepage) {
-          licenseInfo.URL = pkgJson.homepage;
-        } else if (pkgJson.repository) {
-          const repo = typeof pkgJson.repository === 'string' 
-            ? pkgJson.repository 
-            : pkgJson.repository.url || '';
-          if (repo) {
-            licenseInfo.URL = repo.replace(/^git\+/, '').replace(/\.git$/, '');
-          }
         }
       }
     } catch (error) {

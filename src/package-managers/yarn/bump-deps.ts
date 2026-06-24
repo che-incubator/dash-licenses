@@ -79,13 +79,9 @@ export class YarnDependencyProcessor {
       const { head, body } = licenses.data;
 
       body.forEach((libInfo: string[]) => {
-        const url = libInfo[head.indexOf('URL')];
         const licenseInfo: LicenseInfo = {
           License: libInfo[head.indexOf('License')]
         };
-        if (url !== 'Unknown') {
-          licenseInfo.URL = url;
-        }
         this.allDependencies.set(
           `${libInfo[head.indexOf('Name')]}@${libInfo[head.indexOf('Version')]}`,
           licenseInfo

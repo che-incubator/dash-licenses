@@ -47,11 +47,6 @@ export class Yarn3DependencyProcessor {
         if (pkg.license) {
           info.License = typeof pkg.license === 'string' ? pkg.license : pkg.license.type || '';
         }
-        if (pkg.homepage) info.URL = pkg.homepage;
-        else if (pkg.repository) {
-          const repo = typeof pkg.repository === 'string' ? pkg.repository : pkg.repository?.url || '';
-          if (repo) info.URL = repo.replace(/^git\+/, '').replace(/\.git$/, '');
-        }
       }
     } catch {
       // Ignore per-package errors

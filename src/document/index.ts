@@ -252,11 +252,7 @@ export class DocumentGenerator {
 
     depsArray.sort().forEach(item => {
       const license = allLicenses.has(item) ? allLicenses.get(item)?.License ?? '' : '';
-      let lib = `\`${item}\``;
-      const licenseInfo = allLicenses.get(item);
-      if (licenseInfo?.URL) {
-        lib = `[${lib}](${licenseInfo.URL})`;
-      }
+      const lib = `\`${item}\``;
       let cq = '';
       if (depToCQ.has(item)) {
         cq = depToCQ.get(item) ?? '';
