@@ -51,7 +51,7 @@ export class ClearlyDefinedBackend implements LicenseBackend {
   private readonly useBatchAPI: boolean;
 
   constructor(options?: {
-    /** Timeout for batch POST /definitions requests (default: 10 000 ms). */
+    /** Timeout for batch POST /definitions requests (default: 30 000 ms). */
     postTimeoutMs?: number;
     /** Timeout for individual GET /definitions/{id} requests (default: 5 000 ms). */
     getTimeoutMs?: number;

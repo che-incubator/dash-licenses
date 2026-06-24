@@ -38,7 +38,7 @@ export interface ChunkedProcessorOptions {
   retryDelayMs?: number;
   /**
    * Timeout for ClearlyDefined batch POST /definitions requests (ms).
-   * Default: 10 000 ms.
+   * Default: 30 000 ms.
    */
   postTimeoutMs?: number;
   /**
