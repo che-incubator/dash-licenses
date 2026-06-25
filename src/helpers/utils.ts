@@ -213,7 +213,9 @@ export function loadResolvedCache(
     const rowPattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]*) \| (.+) \|$/gm;
     let match: RegExpExecArray | null;
     while ((match = rowPattern.exec(content)) !== null) {
-      const identifier = match[1].trim();
+      // Normalize to plain name@version so Yarn Berry (@npm:) and ClearlyDefined
+      // coordinates (npm/npmjs/…) hit the same cache key as processor lookups.
+      const identifier = coordinateToIdentifier(match[1].trim()) || match[1].trim();
       const license = match[2].trim();
       const cq = match[3].trim();
       // Only cache entries with an actual resolution — skip placeholders like
@@ -234,10 +236,10 @@ export function loadResolvedCache(
     if (!existsSync(filePath)) continue;
     const content = readFileSync(filePath, { encoding: 'utf8' as BufferEncoding });
     // EXCLUDED format: | `identifier` | cq_value |   (no license column)
-    const excludedPattern = /^\| `([^`]+)` \| ([^|]+) \|$/gm;
+    const excludedPattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]+) \|$/gm;
     let match: RegExpExecArray | null;
     while ((match = excludedPattern.exec(content)) !== null) {
-      const identifier = match[1].trim();
+      const identifier = coordinateToIdentifier(match[1].trim()) || match[1].trim();
       const cq = match[2].trim();
       if (identifier && cq) {
         cache.set(identifier, { license: '', cq });
@@ -339,7 +341,8 @@ export class PackageManagerUtils {
     if (!existsSync(excludedPath) || identifiersToRemove.size === 0) return;
     const content = readFileSync(excludedPath, { encoding: encoding as BufferEncoding });
     const lines = content.split(/\r?\n/);
-    const tablePattern = /^\| `([^|^ ]+)` \| ([^|]+) \|$/;
+    // Match both plain (`pkg@v`) and linked-name ([`pkg@v`](url)) rows.
+    const tablePattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]+) \|$/;
     const kept: string[] = [];
     for (const line of lines) {
       const m = line.match(tablePattern);
@@ -577,6 +580,30 @@ export class PackageManagerUtils {
         const name = getPackageName(id);
         return directDeps.prod.has(name) || directDeps.dev.has(name);
       };
+
+      // A package that was previously cached as "transitive dependency" but is
+      // now a direct dependency must be re-evaluated: remove its stale EXCLUDED
+      // entry so it goes through ClearlyDefined lookup again.
+      const staleTransitiveProd = prodDeps.filter(
+        d => depsToCQ.get(d) === 'transitive dependency' && isDirectPackage(d),
+      );
+      const staleTransitiveDev = devDeps.filter(
+        d => depsToCQ.get(d) === 'transitive dependency' && isDirectPackage(d),
+      );
+      if (staleTransitiveProd.length > 0 || staleTransitiveDev.length > 0) {
+        staleTransitiveProd.forEach(d => depsToCQ.delete(d));
+        staleTransitiveDev.forEach(d => depsToCQ.delete(d));
+        PackageManagerUtils.removeUnusedExcludes(
+          paths.EXCLUDED_PROD_MD,
+          new Set(staleTransitiveProd),
+          paths.ENCODING,
+        );
+        PackageManagerUtils.removeUnusedExcludes(
+          paths.EXCLUDED_DEV_MD,
+          new Set(staleTransitiveDev),
+          paths.ENCODING,
+        );
+      }
 
       const stillUnresolvedProd = prodDeps.filter(d => !depsToCQ.has(d));
       const transitiveProd = stillUnresolvedProd.filter(d => !isDirectPackage(d));
