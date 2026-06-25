@@ -343,10 +343,18 @@ export class PackageManagerUtils {
     const lines = content.split(/\r?\n/);
     // Match both plain (`pkg@v`) and linked-name ([`pkg@v`](url)) rows.
     const tablePattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]+) \|$/;
+    // Normalize both sides so Yarn Berry / ClearlyDefined coordinates in
+    // identifiersToRemove or in the EXCLUDED file match each other.
+    const normalizedToRemove = new Set(
+      [...identifiersToRemove].map(id => coordinateToIdentifier(id.trim()) || id.trim()),
+    );
     const kept: string[] = [];
     for (const line of lines) {
       const m = line.match(tablePattern);
-      if (m && identifiersToRemove.has(m[1])) continue;
+      if (m) {
+        const rowId = coordinateToIdentifier(m[1].trim()) || m[1].trim();
+        if (normalizedToRemove.has(rowId)) continue;
+      }
       kept.push(line);
     }
     writeFileSync(excludedPath, kept.join('\n').trimEnd() + '\n', { encoding: encoding as BufferEncoding });
