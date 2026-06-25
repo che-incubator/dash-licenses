@@ -64,6 +64,9 @@ npx @eclipse-che/license-tool --batch 200
 # Auto-request harvest for unresolved dependencies
 npx @eclipse-che/license-tool --harvest
 
+# Force a full re-query, bypassing the cache
+npx @eclipse-che/license-tool --recheck
+
 # JAR fallback for unresolved dev dependencies
 npx @eclipse-che/license-tool --jar /path/to/dash-licenses.jar
 ```
@@ -77,9 +80,18 @@ npx @eclipse-che/license-tool --jar /path/to/dash-licenses.jar
 | `--check` | Check only, do not write any files | `false` |
 | `--batch <n>` | Batch size for ClearlyDefined API requests | `500` |
 | `--harvest` | Request harvest for unresolved deps from ClearlyDefined | `false` |
+| `--recheck` | Bypass the `.deps/` cache and re-query ClearlyDefined for every dependency | `false` |
+| `--post-timeout <ms>` | Timeout for batch POST `/definitions` requests | `30000` ms |
+| `--get-timeout <ms>` | Timeout for individual GET `/definitions/{id}` requests | `5000` ms |
 | `--jar <path>` | Path to Eclipse `dash-licenses.jar` for fallback on unresolved dev deps | — |
 | `--debug` | Copy tmp files for inspection | `false` |
 | `--help` | Show help message | — |
+
+#### Dependency cache
+
+By default the tool reads `.deps/prod.md` and `.deps/dev.md` before calling ClearlyDefined. Any dependency whose **Resolved CQs** column is non-empty (contains a `clearlydefined` link or a CQ number) is considered already resolved and is **skipped** — only new or previously unresolved dependencies are sent to the API. This dramatically reduces API calls for projects with stable dependency trees.
+
+Use `--recheck` to force a full re-query of all dependencies and regenerate the files from scratch.
 
 #### Downloading the Eclipse Dash JAR
 
@@ -174,6 +186,9 @@ Generated in `.deps/`:
 | `check` | `boolean` | `false` | Check only — do not write any files |
 | `debug` | `boolean` | `false` | Copy tmp directory for inspection |
 | `harvest` | `boolean` | `false` | Request harvest for unresolved dependencies from ClearlyDefined |
+| `recheck` | `boolean` | `false` | Bypass the `.deps/` cache and re-query ClearlyDefined for every dependency |
+| `postTimeout` | `number` | `30000` | Timeout (ms) for batch POST `/definitions` requests |
+| `getTimeout` | `number` | `5000` | Timeout (ms) for individual GET `/definitions/{id}` requests |
 | `jarPath` | `string` | — | Path to Eclipse `dash-licenses.jar`; runs JAR fallback for unresolved dev deps, adds approved items to `EXCLUDED`, and regenerates `dev.md` |
 
 Returns `Promise<{ exitCode: 0 | 1; error?: string }>`.

@@ -15,7 +15,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import type { LicenseBackend } from '../backends/types';
 import { ClearlyDefinedBackend } from '../backends/clearlydefined-backend';
 import { JarBackend } from '../backends/jar-backend';
-import { sleep, parseNonEmptyLines, getErrorMessage } from './utils';
+import { sleep, parseNonEmptyLines, getErrorMessage, coordinateToIdentifier, identifierToCoordinate, type CacheEntry } from './utils';
 import { logger } from './logger';
 
 /** Default maximum number of retry attempts for chunk processing */
@@ -34,12 +34,38 @@ export interface ChunkedProcessorOptions {
   batchSize: number;
   outputFile: string;
   debug?: boolean;
-  /** Enable harvest request for unresolved dependencies */
-  enableHarvest?: boolean;
   maxRetries?: number;
   retryDelayMs?: number;
+  /**
+   * Timeout for ClearlyDefined batch POST /definitions requests (ms).
+   * Default: 30 000 ms.
+   */
+  postTimeoutMs?: number;
+  /**
+   * Timeout for ClearlyDefined individual GET /definitions/{id} requests (ms).
+   * Default: 5 000 ms.
+   */
+  getTimeoutMs?: number;
   /** Custom license backend. If not set, uses ClearlyDefinedBackend when dashLicensesJar is absent. */
   backend?: LicenseBackend;
+  /**
+   * Pre-resolved cache from existing .deps/prod.md + .deps/dev.md.
+   * Keys are package identifiers (e.g. "express@4.18.0"); values carry the
+   * SPDX license and resolved CQ string.
+   * Coordinates present in the cache are written directly to the output file
+   * without calling the API.  Omit or leave empty to query everything.
+   */
+  cachedResolutions?: Map<string, CacheEntry>;
+  /**
+   * Set of production dependency identifiers (e.g. "express@4.18.0").
+   * Used to classify cache misses as prod vs dev in log output.
+   */
+  prodIdentifiers?: Set<string>;
+  /**
+   * Set of development dependency identifiers.
+   * Used to classify cache misses as prod vs dev in log output.
+   */
+  devIdentifiers?: Set<string>;
 }
 
 export class ChunkedDashLicensesProcessor {
@@ -60,11 +86,16 @@ export class ChunkedDashLicensesProcessor {
             options.batchSize,
             options.debug
           )
-        : new ClearlyDefinedBackend({ enableHarvest: options.enableHarvest ?? false }));
+        : new ClearlyDefinedBackend({
+            ...(options.postTimeoutMs !== undefined ? { postTimeoutMs: options.postTimeoutMs } : {}),
+            ...(options.getTimeoutMs !== undefined ? { getTimeoutMs: options.getTimeoutMs } : {}),
+          }));
   }
 
   /**
-   * Process dependencies in chunks to avoid timeouts and API limits
+   * Process dependencies in chunks to avoid timeouts and API limits.
+   * If cachedResolutions is provided, coordinates that already appear in the
+   * cache are written directly to the output file without calling the API.
    */
   public async process(): Promise<void> {
     const startTime = Date.now();
@@ -81,12 +112,125 @@ export class ChunkedDashLicensesProcessor {
 
     logger.info(`Total dependencies to process: ${allDependencies.length}`);
 
+    // Step 1b: Apply cache — split into cached vs. new
+    const cache = this.options.cachedResolutions;
+    let depsToQuery = allDependencies;
+    const cachedLines: string[] = [];
+    // EXCLUDED entries whose CQ is a ClearlyDefined link — verify via the API so
+    // they can be auto-removed from EXCLUDED if still approved.
+    const toVerify: string[] = [];
+
+    if (cache && cache.size > 0) {
+      depsToQuery = [];
+      for (const coord of allDependencies) {
+        const id = coordinateToIdentifier(coord);
+        if (id && cache.has(id)) {
+          const entry = cache.get(id)!;
+          const cdCoord = identifierToCoordinate(id) || coord;
+          if (entry.license) {
+            // Resolved by ClearlyDefined (prod.md/dev.md source) — write as approved.
+            cachedLines.push(`${cdCoord}, ${entry.license}, approved, clearlydefined`);
+          } else if (entry.cq.includes('clearlydefined.io')) {
+            // EXCLUDED entry whose CQ is a ClearlyDefined link — send to the API to
+            // confirm it is still approved.  If it comes back approved,
+            // parseDependenciesFile detects it as an "unused exclude" and
+            // processAndGenerateDocuments removes it from the EXCLUDED file.
+            toVerify.push(cdCoord);
+          } else {
+            // ecd.che, transitive dependency, or other non-ClearlyDefined exclusion.
+            // Write as restricted; processExcludedDependencies handles it.
+            cachedLines.push(`${cdCoord}, unknown, restricted, excluded`);
+          }
+        } else {
+          depsToQuery.push(coord);
+        }
+      }
+      const directHits = cachedLines.length;
+      if (directHits > 0 || toVerify.length > 0) {
+        const verifyNote = toVerify.length > 0
+          ? ` (verifying ${toVerify.length} EXCLUDED entr${toVerify.length !== 1 ? 'ies' : 'y'} via API)`
+          : '';
+        logger.info(`Cache hit: ${directHits + toVerify.length} dependencies skipped${verifyNote}.`);
+      }
+      if (depsToQuery.length > 0) {
+        // Build a detailed breakdown so the log is actionable.
+        const prodSet = this.options.prodIdentifiers;
+        const devSet = this.options.devIdentifiers;
+        const cacheNameSet = new Set(
+          [...(cache?.keys() ?? [])].map(id => id.substring(0, id.lastIndexOf('@')))
+        );
+
+        let prod = 0, dev = 0, both = 0, versionBump = 0, brandNew = 0;
+        for (const coord of depsToQuery) {
+          const id = coordinateToIdentifier(coord) || coord;
+          const isProd = prodSet?.has(id) ?? false;
+          const isDev  = devSet?.has(id) ?? false;
+          if (isProd && isDev) both++;
+          else if (isProd) prod++;
+          else if (isDev) dev++;
+
+          const atIdx = id.lastIndexOf('@');
+          const pkgName = atIdx > 0 ? id.substring(0, atIdx) : id;
+          if (cacheNameSet.has(pkgName)) versionBump++;
+          else brandNew++;
+        }
+
+        const parts: string[] = [];
+        if (prodSet && devSet) {
+          if (prod > 0)  parts.push(`${prod} prod`);
+          if (dev > 0)   parts.push(`${dev} dev`);
+          if (both > 0)  parts.push(`${both} prod+dev`);
+        }
+        if (versionBump > 0) parts.push(`${versionBump} version bump${versionBump > 1 ? 's' : ''}`);
+        if (brandNew > 0)    parts.push(`${brandNew} new package${brandNew > 1 ? 's' : ''}`);
+
+        const detail = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+        logger.info(`Cache miss: ${depsToQuery.length} dependencies to query${detail}.`);
+      }
+    }
+
+    // Verify EXCLUDED entries that carry a ClearlyDefined CQ link.
+    // Entries confirmed as approved are written with approved status so that
+    // parseDependenciesFile flags them as unused excludes and
+    // processAndGenerateDocuments auto-removes them from the EXCLUDED files.
+    if (toVerify.length > 0) {
+      try {
+        const verifiedLines = await this.backend.processBatch(toVerify);
+        let autoCleanCount = 0;
+        for (const vLine of verifiedLines) {
+          if (vLine.includes(', approved,')) {
+            cachedLines.push(vLine);
+            autoCleanCount++;
+          } else {
+            const vCoord = vLine.split(',')[0].trim();
+            cachedLines.push(`${vCoord}, unknown, restricted, excluded`);
+          }
+        }
+        if (autoCleanCount > 0) {
+          logger.info(`EXCLUDED verify: ${autoCleanCount}/${toVerify.length} entr${autoCleanCount !== 1 ? 'ies' : 'y'} approved — will be removed from EXCLUDED.`);
+        }
+      } catch (err) {
+        logger.warn(`Could not verify EXCLUDED entries: ${getErrorMessage(err)}. Keeping in EXCLUDED.`);
+        for (const coord of toVerify) {
+          cachedLines.push(`${coord}, unknown, restricted, excluded`);
+        }
+      }
+    }
+
+    // If all deps are cached, write the cached lines and we're done.
+    if (depsToQuery.length === 0) {
+      const sortedCached = Array.from(new Set(cachedLines)).sort();
+      writeFileSync(this.options.outputFile, sortedCached.join('\n') + (sortedCached.length ? '\n' : ''), 'utf8');
+      logger.success(`Merged ${sortedCached.length} unique dependencies into ${this.options.outputFile}`);
+      logger.success(`Successfully processed all ${allDependencies.length} dependencies (all from cache)`);
+      logger.duration('Total processing time', Date.now() - startTime);
+      return;
+    }
+
     // Step 2: Split into chunks
     // Use batch size directly to ensure ClearlyDefined queries stay small
-    // (Eclipse Foundation resolves ~30-50%, leaving remaining for ClearlyDefined)
-    // With chunk = batch, ClearlyDefined gets ~70-150 items max, which is reliable
     const chunkSize = this.options.batchSize;
-    const chunks = this.splitIntoChunks(allDependencies, chunkSize);
+    const chunks = this.splitIntoChunks(depsToQuery, chunkSize);
 
     logger.info(`Split into ${chunks.length} chunks (max ${chunkSize} dependencies per chunk)`);
 
@@ -119,8 +263,9 @@ export class ChunkedDashLicensesProcessor {
     }
 
     // Step 4: Merge all chunk results into final DEPENDENCIES file
+    // Include cached lines so the full set of dependencies is in the output.
     logger.info('Merging chunk results...');
-    const totalEntries = this.mergeChunkResults(tempFiles);
+    const totalEntries = this.mergeChunkResults(tempFiles, cachedLines);
     logger.success(`Merged ${totalEntries} unique dependencies into ${this.options.outputFile}`);
 
     // Step 5: Clean up temporary files
@@ -275,20 +420,18 @@ export class ChunkedDashLicensesProcessor {
   }
 
   /**
-   * Merge all chunk results into final DEPENDENCIES file
+   * Merge all chunk results (and any pre-cached lines) into the final
+   * DEPENDENCIES file, deduplicating and sorting entries.
    */
-  private mergeChunkResults(tempFiles: string[]): number {
-    // Use a Set to deduplicate entries
-    const allEntries = new Set<string>();
+  private mergeChunkResults(tempFiles: string[], cachedLines: string[] = []): number {
+    const allEntries = new Set<string>(cachedLines);
 
     for (const tempFile of tempFiles) {
       if (existsSync(tempFile)) {
         try {
           const content = readFileSync(tempFile, 'utf8');
           const lines = parseNonEmptyLines(content);
-
           lines.forEach(line => allEntries.add(line));
-
           logger.debug(`  Merged ${lines.length} entries from ${tempFile}`);
         } catch (error: unknown) {
           const errorMsg = error instanceof Error ? error.message : String(error);
@@ -301,12 +444,8 @@ export class ChunkedDashLicensesProcessor {
       throw new Error('No entries found in any chunk output files');
     }
 
-    // Sort entries for consistent output (important for git diffs)
     const sortedEntries = Array.from(allEntries).sort();
-
-    // Write to final file
     writeFileSync(this.options.outputFile, sortedEntries.join('\n') + '\n', 'utf8');
-
     return sortedEntries.length;
   }
 

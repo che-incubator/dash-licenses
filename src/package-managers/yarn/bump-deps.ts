@@ -13,6 +13,7 @@
 import * as path from 'path';
 import { readFileSync } from 'fs';
 import { PackageManagerUtils, type FilePaths, type ProcessingOptions } from '../../helpers/utils';
+import { triggerHarvestAsync } from '../../backends/harvest';
 import type { LicenseMap, LicenseInfo } from '../../document';
 
 /**
@@ -78,13 +79,9 @@ export class YarnDependencyProcessor {
       const { head, body } = licenses.data;
 
       body.forEach((libInfo: string[]) => {
-        const url = libInfo[head.indexOf('URL')];
         const licenseInfo: LicenseInfo = {
           License: libInfo[head.indexOf('License')]
         };
-        if (url !== 'Unknown') {
-          licenseInfo.URL = url;
-        }
         this.allDependencies.set(
           `${libInfo[head.indexOf('Name')]}@${libInfo[head.indexOf('Version')]}`,
           licenseInfo
@@ -117,12 +114,17 @@ export class YarnDependencyProcessor {
       const devDeps = allDeps.filter(entry => !prodDeps.includes(entry));
 
       // Process and generate documents using shared utility
+      const processOptions: ProcessingOptions = { ...options };
+      if (options?.harvest) {
+        processOptions.harvestFn = (ids: string[]) => triggerHarvestAsync(ids, options.getTimeoutMs ?? 5000);
+      }
+
       PackageManagerUtils.processAndGenerateDocuments(
         prodDeps,
         devDeps,
         this.allDependencies,
         this.paths,
-        options
+        processOptions,
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

@@ -15,7 +15,6 @@
  */
 export interface LicenseInfo {
   License: string;
-  URL?: string;
 }
 
 /**
@@ -48,6 +47,22 @@ export interface Options {
   check: boolean;
   debug: boolean;
   harvest: boolean;
+  /**
+   * When true, bypass the .deps/prod.md + .deps/dev.md cache and re-query
+   * ClearlyDefined for every dependency, even ones already resolved.
+   * Default: false (cache is used).
+   */
+  recheck: boolean;
+  /**
+   * Timeout for ClearlyDefined batch POST /definitions requests in ms.
+   * Default: 30 000 ms.
+   */
+  postTimeoutMs?: number;
+  /**
+   * Timeout for ClearlyDefined individual GET /definitions/{id} requests in ms.
+   * Default: 5 000 ms.
+   */
+  getTimeoutMs?: number;
 }
 
 /**
@@ -84,11 +99,24 @@ export function parseEnvironment(overrides?: Partial<Environment>): Environment 
  * Pass overrides for library usage.
  */
 export function parseOptions(overrides?: Partial<Options>): Options {
-  const opts = {
-    check: process.argv.includes('--check'),
-    debug: process.argv.includes('--debug'),
-    harvest: process.argv.includes('--harvest'),
+  const args = process.argv.slice(2);
+  const readPositiveIntArg = (flag: string): number | undefined => {
+    const idx = args.indexOf(flag);
+    if (idx === -1 || !args[idx + 1]) return undefined;
+    const n = parseInt(args[idx + 1], 10);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
   };
+
+  const opts: Options = {
+    check: args.includes('--check'),
+    debug: args.includes('--debug'),
+    harvest: args.includes('--harvest'),
+    recheck: args.includes('--recheck'),
+  };
+  const postTimeout = readPositiveIntArg('--post-timeout');
+  const getTimeout = readPositiveIntArg('--get-timeout');
+  if (postTimeout !== undefined) opts.postTimeoutMs = postTimeout;
+  if (getTimeout !== undefined) opts.getTimeoutMs = getTimeout;
   return overrides ? { ...opts, ...overrides } : opts;
 }
 

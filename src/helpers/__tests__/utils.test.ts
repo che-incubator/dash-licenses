@@ -13,7 +13,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PackageManagerUtils, type FilePaths } from '../utils';
+import { PackageManagerUtils, coordinateToIdentifier, identifierToCoordinate, type FilePaths } from '../utils';
 import type { DependencyMap } from '../../document';
 
 describe('PackageManagerUtils Integration Tests', () => {
@@ -295,6 +295,75 @@ describe('PackageManagerUtils Integration Tests', () => {
       const { prod } = PackageManagerUtils.getDirectPackageNames(tmpDir);
       expect(prod.has('axios')).toBe(true);   // direct
       expect(prod.has('follow-redirects')).toBe(false); // transitive dep of axios
+    });
+  });
+
+  describe('coordinateToIdentifier', () => {
+    test('passes through a plain unscoped identifier unchanged', () => {
+      expect(coordinateToIdentifier('express@4.18.0')).toBe('express@4.18.0');
+    });
+
+    test('passes through a plain scoped identifier unchanged', () => {
+      expect(coordinateToIdentifier('@babel/core@7.0.0')).toBe('@babel/core@7.0.0');
+    });
+
+    test('converts Yarn Berry unscoped format (name@npm:version)', () => {
+      expect(coordinateToIdentifier('express@npm:4.18.0')).toBe('express@4.18.0');
+    });
+
+    test('converts Yarn Berry scoped format (@scope/pkg@npm:version)', () => {
+      expect(coordinateToIdentifier('@babel/core@npm:7.0.0')).toBe('@babel/core@7.0.0');
+    });
+
+    test('converts ClearlyDefined coordinate for unscoped package', () => {
+      expect(coordinateToIdentifier('npm/npmjs/-/express/4.18.0')).toBe('express@4.18.0');
+    });
+
+    test('converts ClearlyDefined coordinate for scoped package', () => {
+      expect(coordinateToIdentifier('npm/npmjs/@babel/core/7.0.0')).toBe('@babel/core@7.0.0');
+    });
+
+    test('returns empty string for malformed input', () => {
+      expect(coordinateToIdentifier('')).toBe('');
+      expect(coordinateToIdentifier('no-version-here')).toBe('');
+    });
+  });
+
+  describe('identifierToCoordinate', () => {
+    test('converts unscoped identifier to ClearlyDefined coordinate', () => {
+      expect(identifierToCoordinate('express@4.18.0')).toBe('npm/npmjs/-/express/4.18.0');
+    });
+
+    test('converts scoped identifier to ClearlyDefined coordinate', () => {
+      expect(identifierToCoordinate('@babel/core@7.0.0')).toBe('npm/npmjs/@babel/core/7.0.0');
+    });
+
+    test('returns empty string when there is no @ separator', () => {
+      expect(identifierToCoordinate('express')).toBe('');
+    });
+
+    test('returns empty string when version part is empty', () => {
+      expect(identifierToCoordinate('express@')).toBe('');
+    });
+
+    test('returns empty string for malformed scoped package without slash (e.g. @scope@1.0.0)', () => {
+      expect(identifierToCoordinate('@scope@1.0.0')).toBe('');
+    });
+
+    test('returns empty string for scoped package with trailing slash only', () => {
+      expect(identifierToCoordinate('@scope/@1.0.0')).toBe('');
+    });
+
+    test('round-trips with coordinateToIdentifier for unscoped package', () => {
+      const identifier = 'lodash@4.17.21';
+      const coordinate = identifierToCoordinate(identifier);
+      expect(coordinateToIdentifier(coordinate)).toBe(identifier);
+    });
+
+    test('round-trips with coordinateToIdentifier for scoped package', () => {
+      const identifier = '@types/node@18.0.0';
+      const coordinate = identifierToCoordinate(identifier);
+      expect(coordinateToIdentifier(coordinate)).toBe(identifier);
     });
   });
 

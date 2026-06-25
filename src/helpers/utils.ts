@@ -100,6 +100,154 @@ export function getErrorMessage(error: unknown): string {
 export interface ProcessingOptions {
   harvest?: boolean;
   check?: boolean;
+  /** GET timeout (ms) forwarded to triggerHarvestAsync. Defaults to 5 000. */
+  getTimeoutMs?: number;
+  /**
+   * When provided and harvest is true, called with the list of **direct**
+   * unresolved dependency identifiers (the ones that end up in problems.md).
+   * Transitive unresolved deps (auto-added to EXCLUDED) are excluded.
+   * The function should be fire-and-forget; the caller does not await it.
+   */
+  harvestFn?: (identifiers: string[]) => Promise<void>;
+}
+
+/**
+ * Parse a dependency coordinate or resolution string into a plain
+ * package identifier suitable for cache lookup.
+ *
+ * Handles two input formats:
+ *
+ * 1. Yarn Berry resolution strings (from parseYarnLockfile):
+ *      express@npm:4.18.0              → express@4.18.0
+ *      @babel/core@npm:7.0.0          → @babel/core@7.0.0
+ *
+ * 2. ClearlyDefined coordinate strings (from npm/yarn1 parsers):
+ *      npm/npmjs/-/express/4.18.0     → express@4.18.0
+ *      npm/npmjs/@babel/core/7.0.0    → @babel/core@7.0.0
+ *
+ * Returns an empty string for unrecognised / malformed input.
+ */
+export function coordinateToIdentifier(coordinate: string): string {
+  // Already a plain identifier: package@version
+  // e.g. express@4.18.0 or @babel/core@7.0.0 — used by yarn3 and npm processors
+  if (!coordinate.startsWith('npm/') && !coordinate.includes('@npm:')) {
+    const lastAt = coordinate.lastIndexOf('@');
+    if (lastAt > 0) return coordinate;
+  }
+
+  // Yarn Berry resolution: name@npm:version  (last @npm: wins for scoped pkgs)
+  const npmAt = coordinate.lastIndexOf('@npm:');
+  if (npmAt > 0) {
+    const name = coordinate.slice(0, npmAt);
+    const version = coordinate.slice(npmAt + 5); // skip '@npm:'
+    if (name && version) return `${name}@${version}`;
+  }
+
+  // ClearlyDefined coordinate: npm/npmjs/{scope}/{name}/{version}
+  const parts = coordinate.split('/');
+  if (parts.length >= 5 && parts[0] === 'npm') {
+    const scope = parts[2];
+    const name = parts[3];
+    const version = parts.slice(4).join('/');
+    if (scope === '-') return `${name}@${version}`;
+    return `${scope}/${name}@${version}`;
+  }
+
+  return '';
+}
+
+/**
+ * Convert a package identifier back to an npm coordinate.
+ *
+ *   express@4.18.0      → npm/npmjs/-/express/4.18.0
+ *   @babel/core@7.0.0  → npm/npmjs/@babel/core/7.0.0
+ *
+ * Returns an empty string for identifiers without a version.
+ */
+export function identifierToCoordinate(identifier: string): string {
+  const atIdx = identifier.lastIndexOf('@');
+  if (atIdx <= 0) return '';
+  const name = identifier.slice(0, atIdx);
+  const version = identifier.slice(atIdx + 1);
+  if (!version) return '';
+  if (name.startsWith('@')) {
+    const slashIdx = name.indexOf('/');
+    if (slashIdx <= 1 || slashIdx === name.length - 1) return '';
+    const scope = name.slice(0, slashIdx);
+    const pkg = name.slice(slashIdx + 1);
+    return `npm/npmjs/${scope}/${pkg}/${version}`;
+  }
+  return `npm/npmjs/-/${name}/${version}`;
+}
+
+/** Entry stored in the resolved dependency cache. */
+export interface CacheEntry {
+  /** SPDX license string from the .deps/*.md table row (e.g. "MIT"). */
+  license: string;
+  /** Resolved CQ value (e.g. "[clearlydefined](https://...)"). */
+  cq: string;
+}
+
+/**
+ * Load already-resolved dependencies from the existing .deps/prod.md and
+ * .deps/dev.md files and return them as a map of
+ * identifier → { license, cq }.
+ *
+ * Only entries whose "Resolved CQs" column is non-empty are included.
+ * Empty CQ cells mean the dependency is still unresolved and must be queried.
+ */
+export function loadResolvedCache(
+  prodMdPath: string,
+  devMdPath: string,
+): Map<string, CacheEntry> {
+  const cache = new Map<string, CacheEntry>();
+
+  // ── prod.md / dev.md (3-column: identifier | license | cq) ─────────────
+  for (const filePath of [prodMdPath, devMdPath]) {
+    if (!existsSync(filePath)) continue;
+    const content = readFileSync(filePath, { encoding: 'utf8' as BufferEncoding });
+    // Match table row formats (plain backtick or linked name; license may be empty):
+    //   | `pkg@version` | MIT | [clearlydefined](...) |
+    //   | [`pkg@version`](url) | MIT | [clearlydefined](...) |
+    //   | `pkg@version` |  | ecd.che |   ← empty license (EXCLUDED-sourced entries)
+    const rowPattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]*) \| (.+) \|$/gm;
+    let match: RegExpExecArray | null;
+    while ((match = rowPattern.exec(content)) !== null) {
+      // Normalize to plain name@version so Yarn Berry (@npm:) and ClearlyDefined
+      // coordinates (npm/npmjs/…) hit the same cache key as processor lookups.
+      const identifier = coordinateToIdentifier(match[1].trim()) || match[1].trim();
+      const license = match[2].trim();
+      const cq = match[3].trim();
+      // Only cache entries with an actual resolution — skip placeholders like
+      // "transitive dependency" that don't represent a real ClearlyDefined result.
+      if (cq && cq !== 'transitive dependency') {
+        cache.set(identifier, { license, cq });
+      }
+    }
+  }
+
+  // ── EXCLUDED files (2-column: identifier | cq) ──────────────────────────
+  // Deps in EXCLUDED are already classified (transitive or manually excluded).
+  // Cache them so subsequent runs skip the ClearlyDefined API call entirely.
+  const dir = path.dirname(prodMdPath);
+  const excludedProd = path.join(dir, 'EXCLUDED', 'prod.md');
+  const excludedDev  = path.join(dir, 'EXCLUDED', 'dev.md');
+  for (const filePath of [excludedProd, excludedDev]) {
+    if (!existsSync(filePath)) continue;
+    const content = readFileSync(filePath, { encoding: 'utf8' as BufferEncoding });
+    // EXCLUDED format: | `identifier` | cq_value |   (no license column)
+    const excludedPattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]+) \|$/gm;
+    let match: RegExpExecArray | null;
+    while ((match = excludedPattern.exec(content)) !== null) {
+      const identifier = coordinateToIdentifier(match[1].trim()) || match[1].trim();
+      const cq = match[2].trim();
+      if (identifier && cq) {
+        cache.set(identifier, { license: '', cq });
+      }
+    }
+  }
+
+  return cache;
 }
 
 /**
@@ -193,11 +341,20 @@ export class PackageManagerUtils {
     if (!existsSync(excludedPath) || identifiersToRemove.size === 0) return;
     const content = readFileSync(excludedPath, { encoding: encoding as BufferEncoding });
     const lines = content.split(/\r?\n/);
-    const tablePattern = /^\| `([^|^ ]+)` \| ([^|]+) \|$/;
+    // Match both plain (`pkg@v`) and linked-name ([`pkg@v`](url)) rows.
+    const tablePattern = /^\| \[?`([^`]+)`(?:\]\([^)]*\))? \| ([^|]+) \|$/;
+    // Normalize both sides so Yarn Berry / ClearlyDefined coordinates in
+    // identifiersToRemove or in the EXCLUDED file match each other.
+    const normalizedToRemove = new Set(
+      [...identifiersToRemove].map(id => coordinateToIdentifier(id.trim()) || id.trim()),
+    );
     const kept: string[] = [];
     for (const line of lines) {
       const m = line.match(tablePattern);
-      if (m && identifiersToRemove.has(m[1])) continue;
+      if (m) {
+        const rowId = coordinateToIdentifier(m[1].trim()) || m[1].trim();
+        if (normalizedToRemove.has(rowId)) continue;
+      }
       kept.push(line);
     }
     writeFileSync(excludedPath, kept.join('\n').trimEnd() + '\n', { encoding: encoding as BufferEncoding });
@@ -432,6 +589,30 @@ export class PackageManagerUtils {
         return directDeps.prod.has(name) || directDeps.dev.has(name);
       };
 
+      // A package that was previously cached as "transitive dependency" but is
+      // now a direct dependency must be re-evaluated: remove its stale EXCLUDED
+      // entry so it goes through ClearlyDefined lookup again.
+      const staleTransitiveProd = prodDeps.filter(
+        d => depsToCQ.get(d) === 'transitive dependency' && isDirectPackage(d),
+      );
+      const staleTransitiveDev = devDeps.filter(
+        d => depsToCQ.get(d) === 'transitive dependency' && isDirectPackage(d),
+      );
+      if (staleTransitiveProd.length > 0 || staleTransitiveDev.length > 0) {
+        staleTransitiveProd.forEach(d => depsToCQ.delete(d));
+        staleTransitiveDev.forEach(d => depsToCQ.delete(d));
+        PackageManagerUtils.removeUnusedExcludes(
+          paths.EXCLUDED_PROD_MD,
+          new Set(staleTransitiveProd),
+          paths.ENCODING,
+        );
+        PackageManagerUtils.removeUnusedExcludes(
+          paths.EXCLUDED_DEV_MD,
+          new Set(staleTransitiveDev),
+          paths.ENCODING,
+        );
+      }
+
       const stillUnresolvedProd = prodDeps.filter(d => !depsToCQ.has(d));
       const transitiveProd = stillUnresolvedProd.filter(d => !isDirectPackage(d));
 
@@ -440,13 +621,19 @@ export class PackageManagerUtils {
 
       const allTransitive = [...transitiveProd, ...transitiveDev];
       if (allTransitive.length > 0) {
-        if (isHarvest) {
+        if (!isCheck) {
+          // Always write transitive deps to EXCLUDED in generate mode so that
+          // subsequent runs can skip the ClearlyDefined API call for them.
+          // Without this, every run re-queries the same transitive deps.
           this.appendTransitiveExcludes(paths.EXCLUDED_PROD_MD, transitiveProd, paths.ENCODING);
           this.appendTransitiveExcludes(paths.EXCLUDED_DEV_MD, transitiveDev, paths.ENCODING);
-        } else {
-          const suggestion = isCheck
-            ? 'Run with --harvest to automatically add them, or update .deps/EXCLUDED manually.'
-            : 'Run with --harvest to automatically add them to .deps/EXCLUDED.';
+        }
+        if (!isHarvest && !isCheck) {
+          console.log(`\nNote: ${allTransitive.length} UNRESOLVED transitive dep(s) added to .deps/EXCLUDED.`);
+          console.log('  Run with --recheck to re-query them from scratch.');
+          console.log();
+        } else if (isCheck) {
+          const suggestion = 'Run without --check to persist them to .deps/EXCLUDED.';
           console.log(`\nNote: ${allTransitive.length} UNRESOLVED transitive dep(s) found. ${suggestion}`);
           console.log('  .deps/EXCLUDED should be updated with the next transitive deps:');
           allTransitive.forEach(d => console.log(`    - ${d}`));
@@ -454,6 +641,23 @@ export class PackageManagerUtils {
         }
         // Suppress transitive deps from UNRESOLVED section and problems.md
         allTransitive.forEach(d => depsToCQ.set(d, 'transitive dependency'));
+      }
+
+      // Trigger harvest for DIRECT unresolved deps only (those that will
+      // appear in problems.md). Transitive deps are excluded — they are
+      // handled by EXCLUDED files and do not need ClearlyDefined to harvest.
+      if (isHarvest && options?.harvestFn) {
+        const directUnresolved = [
+          ...stillUnresolvedProd.filter(d => isDirectPackage(d)),
+          ...stillUnresolvedDev.filter(d => isDirectPackage(d)),
+        ];
+        if (directUnresolved.length > 0) {
+          // Fire-and-forget: harvestFn is async but we don't await it so
+          // the tool output is not blocked on harvest HTTP round-trips.
+          void options.harvestFn([...new Set(directUnresolved)]).catch((err: unknown) => {
+            logger.warn(`Harvest trigger failed: ${getErrorMessage(err)}`);
+          });
+        }
       }
 
       // Generate production dependencies document

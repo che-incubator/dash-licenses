@@ -136,9 +136,16 @@ export class DependencyParser {
               identifier = `${name}@${version}`;
             }
             
-            allLicenses.set(identifier, {
-              License: license ? license.trim() : ''
-            });
+            // Don't overwrite a real license with 'unknown' or empty —
+            // allLicenses may already have the correct value from node_modules
+            // (extractLicenseInfo). EXCLUDED-cached entries write 'unknown' as
+            // a placeholder; preserve the existing value in that case.
+            const incomingLicense = license ? license.trim() : '';
+            if (incomingLicense && incomingLicense.toLowerCase() !== 'unknown') {
+              allLicenses.set(identifier, { License: incomingLicense });
+            } else if (!allLicenses.has(identifier)) {
+              allLicenses.set(identifier, { License: incomingLicense });
+            }
           }
         }
       });
@@ -245,11 +252,7 @@ export class DocumentGenerator {
 
     depsArray.sort().forEach(item => {
       const license = allLicenses.has(item) ? allLicenses.get(item)?.License ?? '' : '';
-      let lib = `\`${item}\``;
-      const licenseInfo = allLicenses.get(item);
-      if (licenseInfo?.URL) {
-        lib = `[${lib}](${licenseInfo.URL})`;
-      }
+      const lib = `\`${item}\``;
       let cq = '';
       if (depToCQ.has(item)) {
         cq = depToCQ.get(item) ?? '';

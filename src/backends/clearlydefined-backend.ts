@@ -10,7 +10,7 @@
  *   Red Hat, Inc. - initial API and implementation
  */
 
-import { fetchDefinition, fetchDefinitionsBatch, extractLicense, checkHarvested, requestHarvest } from './clearlydefined-client';
+import { fetchDefinition, fetchDefinitionsBatch, extractLicense } from './clearlydefined-client';
 import { isLicenseApproved } from './license-policy';
 import { toClearlyDefinedId } from './coordinate-utils';
 import { sleep } from '../helpers/utils';
@@ -23,8 +23,18 @@ const POST_BATCH_SIZE = 100;
 const POST_CONCURRENCY = 2;
 /** Delay between POST batches (ms) */
 const POST_BATCH_DELAY_MS = 500;
-/** Timeout for batch POST requests (ms) - longer than individual GETs */
-const POST_TIMEOUT_MS = 60000;
+/**
+ * Default timeout for batch POST /definitions requests (ms).
+ * ClearlyDefined batch POSTs occasionally take 15-25 s; 30 s gives enough
+ * headroom without waiting forever before falling back to GET.
+ */
+const DEFAULT_POST_TIMEOUT_MS = 30000;
+/** Default timeout for individual GET requests (ms) */
+const DEFAULT_GET_TIMEOUT_MS = 5000;
+/** Number of times to retry a failed batch POST before falling back to GET */
+const POST_RETRY_COUNT = 1;
+/** Delay before retrying a failed batch POST (ms) */
+const POST_RETRY_DELAY_MS = 2000;
 
 /** Legacy: Concurrency limit for individual GET requests */
 const GET_CONCURRENCY = 8;
@@ -36,14 +46,22 @@ const GET_BATCH_DELAY_MS = 200;
  * Fetches license data from api.clearlydefined.io and applies approval policy.
  */
 export class ClearlyDefinedBackend implements LicenseBackend {
-  private readonly timeoutMs: number;
+  private readonly postTimeoutMs: number;
+  private readonly getTimeoutMs: number;
   private readonly useBatchAPI: boolean;
-  private readonly enableHarvest: boolean;
 
-  constructor(options?: { timeoutMs?: number; useBatchAPI?: boolean; enableHarvest?: boolean }) {
-    this.timeoutMs = options?.timeoutMs ?? 30000;
-    this.useBatchAPI = options?.useBatchAPI ?? true; // Default to batch POST API
-    this.enableHarvest = options?.enableHarvest ?? false; // Default: harvest disabled
+  constructor(options?: {
+    /** Timeout for batch POST /definitions requests (default: 30 000 ms). */
+    postTimeoutMs?: number;
+    /** Timeout for individual GET /definitions/{id} requests (default: 5 000 ms). */
+    getTimeoutMs?: number;
+    /** @deprecated Use postTimeoutMs / getTimeoutMs instead. Applied to GET requests when getTimeoutMs is absent. */
+    timeoutMs?: number;
+    useBatchAPI?: boolean;
+  }) {
+    this.postTimeoutMs = options?.postTimeoutMs ?? DEFAULT_POST_TIMEOUT_MS;
+    this.getTimeoutMs = options?.getTimeoutMs ?? options?.timeoutMs ?? DEFAULT_GET_TIMEOUT_MS;
+    this.useBatchAPI = options?.useBatchAPI ?? true;
   }
 
   async processBatch(deps: string[]): Promise<string[]> {
@@ -75,11 +93,6 @@ export class ClearlyDefinedBackend implements LicenseBackend {
       : await this.processBatchGET(ids);
 
     results.push(...fetchedResults);
-
-    // If harvest is enabled, check and request harvest for notfound dependencies
-    if (this.enableHarvest) {
-      await this.processHarvest(results);
-    }
 
     const duration = Date.now() - startTime;
     const approved = results.filter(r => r.status === 'approved').length;
@@ -165,75 +178,73 @@ export class ClearlyDefinedBackend implements LicenseBackend {
   /**
    * Fetch multiple definitions using POST /definitions
    */
+  /**
+   * Fetch a batch of coordinates via POST /definitions.
+   * Retries POST_RETRY_COUNT times on failure before falling back to
+   * individual GET requests.
+   */
   private async fetchBatch(coordinates: string[]): Promise<DepResult[]> {
     const startTime = Date.now();
     const url = 'https://api.clearlydefined.io/definitions';
 
-    try {
-      logger.request('POST', `${url} (${coordinates.length} coordinates)`);
-
-      const batchResponse = await fetchDefinitionsBatch(coordinates, POST_TIMEOUT_MS);
-      const duration = Date.now() - startTime;
-
-      logger.response(200, url, duration);
-
-      const results: DepResult[] = [];
-      for (const coordinate of coordinates) {
-        const def = batchResponse[coordinate];
-
-        // Handle missing or empty definitions
-        if (!def || !def.licensed) {
-          logger.debug(`${coordinate}: not found or no license data`);
-          results.push({
-            id: coordinate,
-            license: '',
-            status: 'restricted',
-            source: 'notfound'
-          });
-          continue;
-        }
-
-        const license = extractLicense(def);
-        if (!license) {
-          results.push({
-            id: coordinate,
-            license: '',
-            status: 'restricted',
-            source: 'notfound'
-          });
-          continue;
-        }
-
-        const approved = isLicenseApproved(license);
-        logger.debug(`${coordinate}: ${license} → ${approved ? 'approved' : 'restricted'}`);
-
-        results.push({
-          id: coordinate,
-          license,
-          status: approved ? 'approved' : 'restricted',
-          source: 'clearlydefined'
-        });
+    for (let attempt = 0; attempt <= POST_RETRY_COUNT; attempt++) {
+      if (attempt > 0) {
+        logger.info(`Retrying batch POST (attempt ${attempt + 1}/${POST_RETRY_COUNT + 1}) after ${POST_RETRY_DELAY_MS} ms...`);
+        await sleep(POST_RETRY_DELAY_MS);
       }
-
-      return results;
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logger.response(500, url, duration);
-      logger.warn(`Batch POST failed: ${error}`);
-      logger.info(`Falling back to individual GET requests for ${coordinates.length} coordinates`);
-
-      // Fallback: retry each coordinate individually using GET with concurrency limit
-      const fallbackResults: DepResult[] = [];
-      for (let i = 0; i < coordinates.length; i += GET_CONCURRENCY) {
-        const batch = coordinates.slice(i, i + GET_CONCURRENCY);
-        const batchResults = await Promise.all(
-          batch.map(id => this.fetchOne(id))
-        );
-        fallbackResults.push(...batchResults);
+      try {
+        logger.request('POST', `${url} (${coordinates.length} coordinates)`);
+        const batchResponse = await fetchDefinitionsBatch(coordinates, this.postTimeoutMs);
+        const duration = Date.now() - startTime;
+        logger.response(200, url, duration);
+        return this.parseBatchResponse(coordinates, batchResponse);
+      } catch (err) {
+        logger.warn(`Batch POST failed (attempt ${attempt + 1}/${POST_RETRY_COUNT + 1}): ${err}`);
       }
-
-      return fallbackResults;
     }
+
+    // All POST attempts exhausted — fall back to individual GETs.
+    logger.info(`Falling back to individual GET requests for ${coordinates.length} coordinates`);
+    const fallbackResults: DepResult[] = [];
+    for (let i = 0; i < coordinates.length; i += GET_CONCURRENCY) {
+      const batch = coordinates.slice(i, i + GET_CONCURRENCY);
+      const batchResults = await Promise.all(batch.map(id => this.fetchOne(id)));
+      fallbackResults.push(...batchResults);
+      if (i + GET_CONCURRENCY < coordinates.length) {
+        await sleep(GET_BATCH_DELAY_MS);
+      }
+    }
+    return fallbackResults;
+  }
+
+  /** Parse a batch POST response into DepResult entries. */
+  private parseBatchResponse(
+    coordinates: string[],
+    batchResponse: Record<string, import('./clearlydefined-client').ClearlyDefinedDefinition>,
+  ): DepResult[] {
+    const results: DepResult[] = [];
+    for (const coordinate of coordinates) {
+      const def = batchResponse[coordinate];
+      if (!def || !def.licensed) {
+        logger.debug(`${coordinate}: not found or no license data`);
+        results.push({ id: coordinate, license: '', status: 'restricted', source: 'notfound' });
+        continue;
+      }
+      const license = extractLicense(def);
+      if (!license) {
+        results.push({ id: coordinate, license: '', status: 'restricted', source: 'notfound' });
+        continue;
+      }
+      const approved = isLicenseApproved(license);
+      logger.debug(`${coordinate}: ${license} → ${approved ? 'approved' : 'restricted'}`);
+      results.push({
+        id: coordinate,
+        license,
+        status: approved ? 'approved' : 'restricted',
+        source: 'clearlydefined',
+      });
+    }
+    return results;
   }
 
   private async fetchOne(clearlyDefinedId: string, maxRetries = 3): Promise<DepResult> {
@@ -249,7 +260,7 @@ export class ClearlyDefinedBackend implements LicenseBackend {
           logger.debug(`Retry ${attempt}/${maxRetries} for ${clearlyDefinedId}`);
         }
 
-        const def = await fetchDefinition(clearlyDefinedId, this.timeoutMs);
+        const def = await fetchDefinition(clearlyDefinedId, this.getTimeoutMs);
         const duration = Date.now() - startTime;
 
         const license = def ? extractLicense(def) : '';
@@ -316,73 +327,6 @@ export class ClearlyDefinedBackend implements LicenseBackend {
       status: 'restricted',
       source: 'error'
     };
-  }
-
-  /**
-   * Check and request harvest for dependencies that were not found.
-   * Only processes dependencies with source 'notfound' or 'error'.
-   * Uses batched concurrency to avoid overwhelming the API.
-   */
-  private async processHarvest(results: DepResult[]): Promise<void> {
-    const notfound = results.filter(r => r.source === 'notfound' || r.source === 'error');
-    if (notfound.length === 0) {
-      return;
-    }
-
-    logger.info(`Checking harvest status for ${notfound.length} unresolved dependencies...`);
-
-    let alreadyHarvested = 0;
-    let harvestRequested = 0;
-    let harvestFailed = 0;
-
-    // Process harvest requests with controlled concurrency (same as GET_CONCURRENCY)
-    const HARVEST_CONCURRENCY = GET_CONCURRENCY;
-
-    for (let i = 0; i < notfound.length; i += HARVEST_CONCURRENCY) {
-      const batch = notfound.slice(i, i + HARVEST_CONCURRENCY);
-
-      const batchResults = await Promise.all(
-        batch.map(async (dep) => {
-          try {
-            // Check if already harvested
-            const harvested = await checkHarvested(dep.id, this.timeoutMs);
-
-            if (harvested.length > 0) {
-              logger.debug(`${dep.id}: already harvested (${harvested.length} tools)`);
-              return { status: 'already-harvested' };
-            }
-
-            // Request harvest
-            logger.info(`${dep.id}: requesting harvest...`);
-            await requestHarvest(dep.id, this.timeoutMs);
-            return { status: 'requested' };
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            logger.debug(`${dep.id}: harvest request failed - ${errorMessage}`);
-            return { status: 'failed' };
-          }
-        })
-      );
-
-      // Aggregate results from this batch
-      for (const result of batchResults) {
-        if (result.status === 'already-harvested') alreadyHarvested++;
-        else if (result.status === 'requested') harvestRequested++;
-        else if (result.status === 'failed') harvestFailed++;
-      }
-
-      // Small delay between batches to avoid overwhelming the API
-      if (i + HARVEST_CONCURRENCY < notfound.length) {
-        await sleep(GET_BATCH_DELAY_MS);
-      }
-    }
-
-    if (harvestRequested > 0) {
-      logger.info(`Harvest requested for ${harvestRequested} dependencies (${alreadyHarvested} already harvested, ${harvestFailed} failed)`);
-      logger.info('Note: Harvested data may take several minutes to process. Re-run the tool later to check for updates.');
-    } else if (alreadyHarvested > 0) {
-      logger.info(`All ${alreadyHarvested} unresolved dependencies are already being harvested`);
-    }
   }
 
   private toDependenciesLine(r: DepResult): string {

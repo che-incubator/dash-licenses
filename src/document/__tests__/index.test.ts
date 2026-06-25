@@ -186,28 +186,29 @@ describe('DocumentGenerator', () => {
       ]);
       const allLicenses: LicenseMap = new Map([
         ['react@18.0.0', { License: 'MIT' }],
-        ['lodash@4.17.21', { License: 'MIT', URL: 'https://lodash.com' }]
+        ['lodash@4.17.21', { License: 'MIT' }]
       ]);
-      
+
       const result = DocumentGenerator.arrayToDocument(title, depsArray, depToCQ, allLicenses);
-      
+
       expect(result).toContain('# Production dependencies');
       expect(result).toContain('| Packages | License | Resolved CQs |');
-      expect(result).toContain('| [`lodash@4.17.21`](https://lodash.com) | MIT | IP team approval |');
+      expect(result).toContain('| `lodash@4.17.21` | MIT | IP team approval |');
       expect(result).toContain('| `react@18.0.0` | MIT | clearlydefined |');
     });
 
-    test('should handle dependencies with URLs', () => {
+    test('should render package name as plain backtick code (no hyperlink)', () => {
       const title = 'Test dependencies';
       const depsArray = ['test-package@1.0.0'];
       const depToCQ: DependencyMap = new Map([['test-package@1.0.0', 'approved']]);
       const allLicenses: LicenseMap = new Map([
-        ['test-package@1.0.0', { License: 'MIT', URL: 'https://example.com' }]
+        ['test-package@1.0.0', { License: 'MIT' }]
       ]);
-      
+
       const result = DocumentGenerator.arrayToDocument(title, depsArray, depToCQ, allLicenses);
-      
-      expect(result).toContain('[`test-package@1.0.0`](https://example.com)');
+
+      expect(result).toContain('| `test-package@1.0.0` | MIT | approved |');
+      expect(result).not.toContain('](');
     });
 
     test('should handle unresolved dependencies', () => {

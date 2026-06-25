@@ -15,6 +15,7 @@ import { existsSync, statSync, unlinkSync, copyFileSync, mkdirSync } from 'fs';
 import * as path from 'path';
 import { Environment, Options, PackageManagerResult, parseEnvironment, parseOptions } from './types';
 import { FILE_NAMES, getErrorMessage } from './utils';
+import { recheckAndCleanExcluded } from './recheck-excluded';
 
 /**
  * Configuration options for a package manager
@@ -300,6 +301,20 @@ export abstract class PackageManagerBase {
    */
   protected async checkRestrictions(): Promise<PackageManagerResult> {
     const restricted = await this.runBumpDeps();
+
+    // With --harvest, re-query every EXCLUDED entry against ClearlyDefined.
+    // Any entry now approved is removed from EXCLUDED automatically.
+    // Skip in --check mode — EXCLUDED files must not be modified during a check.
+    if (this.options.harvest && !this.options.check) {
+      const recheckOpts: { getTimeoutMs?: number; postTimeoutMs?: number } = {};
+      if (this.options.getTimeoutMs !== undefined) recheckOpts.getTimeoutMs = this.options.getTimeoutMs;
+      if (this.options.postTimeoutMs !== undefined) recheckOpts.postTimeoutMs = this.options.postTimeoutMs;
+      await recheckAndCleanExcluded(
+        path.join(this.env.DEPS_DIR, 'EXCLUDED', FILE_NAMES.PROD_MD),
+        path.join(this.env.DEPS_DIR, 'EXCLUDED', FILE_NAMES.DEV_MD),
+        recheckOpts
+      );
+    }
 
     let differProd = '';
     let differDev = '';

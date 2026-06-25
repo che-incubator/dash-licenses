@@ -13,6 +13,7 @@
 import * as path from 'path';
 import { readFileSync, existsSync } from 'fs';
 import { PackageManagerUtils, type FilePaths, type ProcessingOptions } from '../../helpers/utils';
+import { triggerHarvestAsync } from '../../backends/harvest';
 import type { LicenseMap, LicenseInfo } from '../../document';
 
 /**
@@ -56,20 +57,9 @@ export class NpmDependencyProcessor {
         const pkgJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
         
         if (pkgJson.license) {
-          licenseInfo.License = typeof pkgJson.license === 'string' 
-            ? pkgJson.license 
+          licenseInfo.License = typeof pkgJson.license === 'string'
+            ? pkgJson.license
             : pkgJson.license.type || '';
-        }
-        
-        if (pkgJson.homepage) {
-          licenseInfo.URL = pkgJson.homepage;
-        } else if (pkgJson.repository) {
-          const repo = typeof pkgJson.repository === 'string' 
-            ? pkgJson.repository 
-            : pkgJson.repository.url || '';
-          if (repo) {
-            licenseInfo.URL = repo.replace(/^git\+/, '').replace(/\.git$/, '');
-          }
         }
       }
     } catch (error) {
@@ -98,12 +88,17 @@ export class NpmDependencyProcessor {
       });
 
       // Process and generate documents
+      const processOptions: ProcessingOptions = { ...options };
+      if (options?.harvest) {
+        processOptions.harvestFn = (ids: string[]) => triggerHarvestAsync(ids, options.getTimeoutMs ?? 5000);
+      }
+
       PackageManagerUtils.processAndGenerateDocuments(
         prodDeps,
         devDeps,
         this.allDependencies,
         this.paths,
-        options
+        processOptions,
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

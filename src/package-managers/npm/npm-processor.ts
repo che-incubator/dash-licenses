@@ -18,6 +18,7 @@ import { parseNpmDependencies } from './parser';
 import { NpmDependencyProcessor } from './bump-deps';
 import type { Environment, Options } from '../../helpers/types';
 import { environmentToProcessEnv } from '../../helpers/types';
+import { loadResolvedCache } from '../../helpers/utils';
 
 /**
  * NPM package manager processor.
@@ -61,6 +62,13 @@ export class NpmProcessor extends PackageManagerBase {
     const depsFilePath = path.join(this.env.TMP_DIR, 'DEPENDENCIES');
 
     try {
+      const cachedResolutions = this.options.recheck
+        ? undefined
+        : loadResolvedCache(
+            path.join(this.env.DEPS_DIR, 'prod.md'),
+            path.join(this.env.DEPS_DIR, 'dev.md'),
+          );
+
       const processor = new ChunkedDashLicensesProcessor({
         parserScript: 'cat',
         parserInput: allDepsFile,
@@ -68,7 +76,11 @@ export class NpmProcessor extends PackageManagerBase {
         batchSize: parseInt(this.env.BATCH_SIZE),
         outputFile: depsFilePath,
         debug: this.options.debug,
-        enableHarvest: this.options.harvest
+        prodIdentifiers: new Set(allDeps.dependencies),
+        devIdentifiers: new Set(allDeps.devDependencies),
+        ...(this.options.postTimeoutMs !== undefined ? { postTimeoutMs: this.options.postTimeoutMs } : {}),
+        ...(this.options.getTimeoutMs !== undefined ? { getTimeoutMs: this.options.getTimeoutMs } : {}),
+        ...(cachedResolutions ? { cachedResolutions } : {}),
       });
 
       await processor.process();
@@ -90,7 +102,9 @@ export class NpmProcessor extends PackageManagerBase {
     console.log('Checking dependencies for restrictions to use...');
     try {
       const processor = new NpmDependencyProcessor();
-      processor.process({ harvest: this.options.harvest, check: this.options.check });
+      const procOpts: import('../../helpers/utils').ProcessingOptions = { harvest: this.options.harvest, check: this.options.check };
+      if (this.options.getTimeoutMs !== undefined) procOpts.getTimeoutMs = this.options.getTimeoutMs;
+      processor.process(procOpts);
       return 0;
     } catch (error) {
       // Error already logged by the processor

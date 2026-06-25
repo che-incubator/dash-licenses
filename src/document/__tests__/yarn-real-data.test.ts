@@ -120,13 +120,9 @@ describe('Yarn Real Data Integration Tests', () => {
         const licenses = JSON.parse(yarnDepsInfo.substring(tableStartIndex));
         const { head, body } = licenses.data;
         body.forEach((libInfo: string[]) => {
-          const url = libInfo[head.indexOf('URL')];
           const licenseInfo: LicenseInfo = {
             License: libInfo[head.indexOf('License')]
           };
-          if (url && url !== 'Unknown') {
-            licenseInfo.URL = url;
-          }
           allLicenses.set(`${libInfo[head.indexOf('Name')]}@${libInfo[head.indexOf('Version')]}`, licenseInfo);
         });
       }

@@ -13,6 +13,7 @@
 import * as path from 'path';
 import { readFileSync, existsSync } from 'fs';
 import { PackageManagerUtils, type FilePaths, type ProcessingOptions } from '../../helpers/utils';
+import { triggerHarvestAsync } from '../../backends/harvest';
 import type { LicenseMap, LicenseInfo } from '../../document';
 
 interface LockfileDepsInfo {
@@ -46,11 +47,6 @@ export class Yarn3DependencyProcessor {
         if (pkg.license) {
           info.License = typeof pkg.license === 'string' ? pkg.license : pkg.license.type || '';
         }
-        if (pkg.homepage) info.URL = pkg.homepage;
-        else if (pkg.repository) {
-          const repo = typeof pkg.repository === 'string' ? pkg.repository : pkg.repository?.url || '';
-          if (repo) info.URL = repo.replace(/^git\+/, '').replace(/\.git$/, '');
-        }
       }
     } catch {
       // Ignore per-package errors
@@ -74,12 +70,17 @@ export class Yarn3DependencyProcessor {
         this.allDependencies.set(pkg, this.extractLicenseInfo(pkg));
       });
 
+      const processOptions: ProcessingOptions = { ...options };
+      if (options?.harvest) {
+        processOptions.harvestFn = (ids: string[]) => triggerHarvestAsync(ids, options.getTimeoutMs ?? 5000);
+      }
+
       PackageManagerUtils.processAndGenerateDocuments(
         prodDeps,
         devDeps,
         this.allDependencies,
         this.paths,
-        options
+        processOptions,
       );
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
