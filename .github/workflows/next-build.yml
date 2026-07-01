@@ -1,0 +1,57 @@
+#
+# Copyright (c) 2024-2026 Red Hat, Inc.
+# This program and the accompanying materials are made
+# available under the terms of the Eclipse Public License 2.0
+# which is available at https://www.eclipse.org/legal/epl-2.0/
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+
+name: Next Build/Publish
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write  # Required for Trusted Publishing to npmjs
+  contents: read
+
+jobs:
+  next-build-publish:
+    name: Publish @eclipse-che/license-tool@next
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@eclipse-che'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-
+
+      - name: Set next version
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BASE_VERSION=$(node -p "require('./package.json').version" | sed 's/-.*//')
+          NEXT_VERSION="${BASE_VERSION}-next.${SHORT_SHA}"
+          echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
+          npm version "${NEXT_VERSION}" --no-git-tag-version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish @next to npmjs
+        run: npm publish --tag next --access public --provenance
