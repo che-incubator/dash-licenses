@@ -41,9 +41,8 @@ jobs:
 
       - name: Set next version
         run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
           BASE_VERSION=$(node -p "require('./package.json').version" | sed 's/-.*//')
-          NEXT_VERSION="${BASE_VERSION}-next.${SHORT_SHA}"
+          NEXT_VERSION="${BASE_VERSION}-next"
           echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
           npm version "${NEXT_VERSION}" --no-git-tag-version
 
@@ -54,4 +53,9 @@ jobs:
         run: npm run build
 
       - name: Publish @next to npmjs
-        run: npm publish --tag next --access public --provenance
+        run: |
+          if npm view "@eclipse-che/license-tool@${NEXT_VERSION}" version 2>/dev/null | grep -q "${NEXT_VERSION}"; then
+            echo "[INFO] Version ${NEXT_VERSION} already published on npm, skipping."
+          else
+            npm publish --tag next --access public --provenance
+          fi
