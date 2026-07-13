@@ -74,7 +74,7 @@ publishArtifacts() {
   npm run build
 
   if [[ ${SKIP_PUBLISH} -eq 0 ]]; then
-    npm publish --tag latest --access public
+    npm publish --tag latest --access public --provenance
   else
     echo "[INFO] Skipping publishing step"
   fi
@@ -86,21 +86,6 @@ tagRelease() {
     git push origin "${VERSION}"
   else
     echo "[INFO] Skipping pushing tag ${VERSION} step"
-  fi
-}
-
-createPR() {
-  local base=$1
-  local branch=$2
-  local message=$3
-
-  echo "[INFO] Create PR with base = ${base} and head = ${branch}"
-
-  existing_pr=$(gh pr list --base "${base}" --head "${branch}" --state open --json number --jq '.[0].number' 2>/dev/null || true)
-  if [[ -n "${existing_pr}" ]]; then
-    echo "[INFO] PR #${existing_pr} already exists for ${branch} -> ${base}, skipping creation."
-  else
-    gh pr create --base "${base}" --head "${branch}" --title "${message}" --body ""
   fi
 }
 
@@ -130,7 +115,7 @@ updatePackageVersionAndCommitChanges() {
 releaseVersion() {
   checkoutToMain
 
-  COMMIT_MSG="ci: release ${VERSION}"
+  COMMIT_MSG="ci: release ${VERSION} [skip ci]"
 
   updatePackageVersionAndCommitChanges \
     "${VERSION}" \
@@ -143,20 +128,12 @@ releaseVersion() {
 bumpNextVersion() {
   checkoutToMain
 
-  COMMIT_MSG="ci: bump to ${NEXT_VERSION}"
+  COMMIT_MSG="ci: bump to ${NEXT_VERSION} [skip ci]"
 
   updatePackageVersionAndCommitChanges \
     "${NEXT_VERSION}" \
     "${COMMIT_MSG}"
 
-  if [[ ${NO_PUSH} -eq 0 ]]; then
-    createPR \
-      "main" \
-      "${NEXT_BRANCH}" \
-      "${COMMIT_MSG}"
-  else
-    echo "[INFO] Skipping PR creation step"
-  fi
 }
 
 run() {
