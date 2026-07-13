@@ -38,13 +38,14 @@ jobs:
       - name: Validate parameters and build type
         shell: bash
         id: dist-tag-eval
+        env:
+          RELEASE_VERSION: ${{ github.event.inputs.release-version }}
         run: |
           # check if workflow is triggered manually (release) or via branch push (next build)
           # release will always be performed as workflow_dispatch trigger, while push triggers are for dev/next builds
           # based on this information, we determine the dist-tag for pushing to npmjs
           DIST_TAG=
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            RELEASE_VERSION=${{ github.event.inputs.release-version }}
             if [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "[INFO]" preparing to build and release with version: $RELEASE_VERSION
               # DIST_TAG is not used in make-release.sh, as release version will always be latest anyway
@@ -67,13 +68,16 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Check existing tags
         if: github.event_name == 'workflow_dispatch'
+        env:
+          RECREATE_TAGS: ${{ github.event.inputs.release-remake }}
+          VERSION: ${{ github.event.inputs.release-version }}
         run: |
           set -e
-          RECREATE_TAGS="${{ github.event.inputs.forceRecreateTags }}"
-          VERSION="${{ github.event.inputs.version }}"
           TAG_RC=0
           git ls-remote --exit-code origin "refs/tags/${VERSION}" >/dev/null 2>&1 || TAG_RC=$?
           if [[ ${TAG_RC} -eq 0 ]]; then
@@ -99,6 +103,9 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           scope: '@eclipse-che'
 
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+
       - uses: actions/cache@v4
         with:
           path: ~/.npm
@@ -108,7 +115,7 @@ jobs:
       - name: Set next version
         run: |
           BASE_VERSION=$(node -p "require('./package.json').version" | sed 's/-.*//')
-          NEXT_VERSION="${BASE_VERSION}-next"
+          NEXT_VERSION="${BASE_VERSION}-next.${GITHUB_SHA:0:7}"
           echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
           npm version "${NEXT_VERSION}" --no-git-tag-version
 
@@ -129,9 +136,10 @@ jobs:
       - name: Build and publish release version
         if: github.event_name == 'workflow_dispatch'
         env:
-          GITHUB_TOKEN: ${{secrets.secrets.LICENSE_TOOL_RELEASE_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.LICENSE_TOOL_RELEASE_GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ github.event.inputs.release-version }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          ./make-release.sh --version ${{ github.event.inputs.release-version }}
+          ./make-release.sh --version "${RELEASE_VERSION}"
