@@ -49,63 +49,22 @@ init() {
     exit 1
   fi
 
-  X_BRANCH="${VERSION%?}x"
-  NEXT_BRANCH="pr-main-to-${VERSION}-next"
   NEXT_VERSION="${VERSION}-next"
 
   echo "Running release script with following parameters:"
+  echo "Release version: ${VERSION}"
   echo "no pushes to github: ${NO_PUSH}"
   echo "no publishing to npmjs: ${SKIP_PUBLISH}"
   echo "no bumping of the next version: ${SKIP_NEXT_VERSION_BUMP}"
 }
 
-resetChanges() {
-  local branch="$1"
-
-  echo "[INFO] Reset changes in ${branch} branch"
+checkoutToMain() {
+  echo "[INFO] Checking out to main branch"
 
   git reset --hard
-  git checkout "${branch}"
+  git checkout main
   git fetch origin --prune
-  git pull origin "${branch}"
-}
-
-checkoutToXBranch() {
-  echo "[INFO] Check out to ${X_BRANCH} branch."
-
-  if git ls-remote --exit-code --heads origin "refs/heads/${X_BRANCH}" >/dev/null 2>&1; then
-    echo "[INFO] ${X_BRANCH} exists."
-    resetChanges "${X_BRANCH}"
-  else
-    echo "[INFO] ${X_BRANCH} does not exist. Will be created a new one from main."
-    resetChanges "main"
-    if [[ ${NO_PUSH} -eq 0 ]]; then
-      git push origin main:"${X_BRANCH}"
-      git checkout "${X_BRANCH}"
-    else
-      echo "[INFO] Skipping pushing branch ${X_BRANCH} step"
-      git checkout -b "${X_BRANCH}"
-    fi
-  fi
-}
-
-checkoutToNextBranch() {
-  echo "[INFO] Check out to ${NEXT_BRANCH} branch."
-
-  if git ls-remote --exit-code --heads origin "refs/heads/${NEXT_BRANCH}" >/dev/null 2>&1; then
-    echo "[INFO] ${NEXT_BRANCH} exists."
-    resetChanges "${NEXT_BRANCH}"
-  else
-    echo "[INFO] ${NEXT_BRANCH} does not exist. Will be created a new one from main."
-    resetChanges "main"
-    if [[ ${NO_PUSH} -eq 0 ]]; then
-      git push origin main:"${NEXT_BRANCH}"
-      git checkout "${NEXT_BRANCH}"
-    else
-      echo "[INFO] Skipping pushing branch ${NEXT_BRANCH} step"
-      git checkout -b "${NEXT_BRANCH}"
-    fi
-  fi
+  git pull origin main
 }
 
 publishArtifacts() {
@@ -115,7 +74,7 @@ publishArtifacts() {
   npm run build
 
   if [[ ${SKIP_PUBLISH} -eq 0 ]]; then
-    npm publish --tag latest --access public
+    npm publish --tag latest --access public --provenance
   else
     echo "[INFO] Skipping publishing step"
   fi
@@ -130,25 +89,9 @@ tagRelease() {
   fi
 }
 
-createPR() {
-  local base=$1
-  local branch=$2
-  local message=$3
-
-  echo "[INFO] Create PR with base = ${base} and head = ${branch}"
-
-  existing_pr=$(gh pr list --base "${base}" --head "${branch}" --state open --json number --jq '.[0].number' 2>/dev/null || true)
-  if [[ -n "${existing_pr}" ]]; then
-    echo "[INFO] PR #${existing_pr} already exists for ${branch} -> ${base}, skipping creation."
-  else
-    gh pr create --base "${base}" --head "${branch}" --title "${message}" --body ""
-  fi
-}
-
 updatePackageVersionAndCommitChanges() {
   local version=$1
-  local branch=$2
-  local message=$3
+  local message=$2
 
   local current_version
   current_version=$(npm pkg get version)
@@ -162,51 +105,41 @@ updatePackageVersionAndCommitChanges() {
     git add package.json package-lock.json
     git commit -s -m "${message}"
     if [[ ${NO_PUSH} -eq 0 ]]; then
-        git push origin "${branch}"
+        git push origin main
     else
-      echo "[INFO] Skipping pushing branch ${branch} step"
+      echo "[INFO] Skipping pushing to main branch"
     fi
   fi
 }
 
-updateXBranch() {
-  checkoutToXBranch
+releaseVersion() {
+  checkoutToMain
 
-  COMMIT_MSG="ci: bump ${VERSION} in ${X_BRANCH}"
+  COMMIT_MSG="ci: release ${VERSION} [skip ci]"
 
   updatePackageVersionAndCommitChanges \
     "${VERSION}" \
-    "${X_BRANCH}" \
     "${COMMIT_MSG}"
 
   tagRelease
   publishArtifacts
 }
 
-updateMainBranch() {
-  checkoutToNextBranch
+bumpNextVersion() {
+  checkoutToMain
 
-  COMMIT_MSG="ci: bump ${NEXT_VERSION} in main"
+  COMMIT_MSG="ci: bump to ${NEXT_VERSION} [skip ci]"
 
   updatePackageVersionAndCommitChanges \
     "${NEXT_VERSION}" \
-    "${NEXT_BRANCH}" \
     "${COMMIT_MSG}"
 
-  if [[ ${NO_PUSH} -eq 0 ]]; then
-    createPR \
-      "main" \
-      "${NEXT_BRANCH}" \
-      "${COMMIT_MSG}"
-  else
-    echo "[INFO] Skipping PR creation step"
-  fi
 }
 
 run() {
-  updateXBranch
+  releaseVersion
   if [[ ${SKIP_NEXT_VERSION_BUMP} -eq 0 ]]; then
-    updateMainBranch
+    bumpNextVersion
   else
     echo "[INFO] Skipping next version bumping step"
   fi
