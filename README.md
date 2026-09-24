@@ -320,6 +320,14 @@ license-tool --help
 | `npm run header:check` | Verify EPL-2.0 license headers |
 | `npm run header:fix` | Add missing license headers |
 
+## CI, building and publishing
+
+Version specified in package.json in main branch indicates the currently development version
+
+`typescript-publish.yml` workflow is responsible for building and publishing the artifact to npmjs.
+Pushes to main branch will trigger a publication of development build with the -next.SHA suffix version and "next" dist tag
+Pushes of tags, or running the pipeline manually with release mode will push a latest. The version provided in parameter must match the version provided in package.json.
+
 ## Risks and Limitations
 
 - **ClearlyDefined coverage**: Newly published packages may not be indexed yet; use `--jar` or `--harvest` to resolve them
