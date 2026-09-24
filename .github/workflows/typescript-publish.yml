@@ -12,21 +12,20 @@ name: Build and publish project to npmjs
 on:
   workflow_dispatch:
     inputs:
-      release-version:
-        description: 'release version in format x.y.z'
-        required: true
-      release-remake:
-        description: 'set to true to recreate existing tags (otherwise release will fail if tags already exist)'
+      release-mode:
+        description: 'If true, buld and release version that is specified in package.json. Otherwise, build the next version instead'
         type: boolean
         default: false
         required: true
   push:
     branches: 
       - main
+    tags:
+      - '2.*.*'
 
 permissions:
   id-token: write  # Required for publishing to npmjs
-  contents: write
+  contents: read
 
 
 concurrency:
@@ -34,81 +33,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  next-build-publish:
-    name: Publish @eclipse-che/license-tool@next
+  build-publish:
+    name: Publish @eclipse-che/license-tool
     runs-on: ubuntu-22.04
     timeout-minutes: 20
+    env:
+      RELEASE_MODE: ${{ github.event.inputs.release-mode }}
     steps:
+      - name: Display workflow parameters
+        run: |
+          echo "=== Workflow Parameters ==="
+          echo "Event name: ${{ github.event_name }}"
+          echo "Ref: $GITHUB_REF"
+          echo "Branch: ${GITHUB_REF##*/}"
+          echo "Release: ${RELEASE}"
+          echo "Release version: ${RELEASE_VERSION}"
+          echo "=========================="
+
       - name: Validate parameters and build type
         shell: bash
-        id: dist-tag-eval
-        env:
-          RELEASE_VERSION: ${{ github.event.inputs.release-version }}
         run: |
-          # check if workflow is triggered manually (release) or via branch push (next build)
-          # release will always be performed as workflow_dispatch trigger, while push triggers are for dev/next builds
-          # based on this information, we determine the dist-tag for pushing to npmjs
           DIST_TAG=
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            if [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "[INFO] preparing to build and release with version: ${RELEASE_VERSION}"
-              # DIST_TAG is not used in make-release.sh, as release version will always be latest anyway
-              DIST_TAG=latest
-            else
-              echo "[ERROR] incorrect version '${RELEASE_VERSION}'. Must be following format <number>.<number>.<number>, e.g. 2.1.0"
-              exit 1
-            fi
+          if [[ ${{ github.ref_type }} == "tag" ]]; then
+            RELEASE_MODE=true
           fi
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            if [[ ${GITHUB_REF##*/} == "2."**".x" ]]; then
-              echo "[INFO] using ${GITHUB_REF##*/} tag"
-              DIST_TAG="next-${GITHUB_REF##*/}"
-            else
-              echo "[INFO] using "next" tag"
+          if [[ ${RELEASE_MODE} == "true" ]]; then
+            echo "[INFO] preparing to build and release with version: ${RELEASE_VERSION}"
+            DIST_TAG=latest
+            echo "[INFO] using ${DIST_TAG} tag for release"
+          else
               DIST_TAG=next
-            fi
+              echo "[INFO] using "${DIST_TAG}" tag for development build"
           fi
-          echo "npm_dist_tag=$DIST_TAG" >> $GITHUB_OUTPUT
+          echo "NPM_DIST_TAG=$DIST_TAG" >> $GITHUB_ENV
 
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Configure git credentials for release
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GITHUB_TOKEN: ${{ secrets.LICENSE_TOOL_RELEASE_GITHUB_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Check existing tags
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          RECREATE_TAGS: ${{ github.event.inputs.release-remake }}
-          VERSION: ${{ github.event.inputs.release-version }}
-        run: |
-          set -e
-          TAG_RC=0
-          git ls-remote --exit-code origin "refs/tags/${VERSION}" >/dev/null 2>&1 || TAG_RC=$?
-          if [[ ${TAG_RC} -eq 0 ]]; then
-            if [[ "${RECREATE_TAGS}" == "true" ]]; then
-              echo "[INFO] Removing tag for ${VERSION} version. New tag will be recreated during release."
-              git tag -d "${VERSION}" 2>/dev/null || true
-              git push origin :"${VERSION}"
-            else
-              echo "[ERROR] Cannot proceed with release - tag ${VERSION} already exists."
-              exit 1
-            fi
-          elif [[ ${TAG_RC} -eq 2 ]]; then
-            echo "[INFO] No existing tags detected for ${VERSION}"
-          else
-            echo "[ERROR] Failed to verify remote tags for ${VERSION} (exit code: ${TAG_RC})"
-            exit 1
-          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -126,32 +89,28 @@ jobs:
           key: npm-${{ hashFiles('package-lock.json') }}
           restore-keys: npm-
 
-      - name: Set next version
-        if: github.event_name == 'push'
+      - name: Set publish version
         run: |
-          BASE_VERSION=$(node -p "require('./package.json').version" | sed 's/-.*//')
-          NEXT_VERSION="${BASE_VERSION}-next.${GITHUB_SHA:0:7}"
-          echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
-          npm version "${NEXT_VERSION}" --no-git-tag-version
+          if [[ "${NPM_DIST_TAG}" == "next" ]]; then
+            BASE_VERSION=$(node -p "require('./package.json').version" | sed 's/-.*//')
+            PUBLISH_VERSION="${BASE_VERSION}-next.${GITHUB_SHA:0:7}"
+            echo "PUBLISH_VERSION=${PUBLISH_VERSION}" >> $GITHUB_ENV
+            npm version "${PUBLISH_VERSION}" --no-git-tag-version
+          else
+            PUBLISH_VERSION=$(node -p "require('./package.json').version")
+            echo "PUBLISH_VERSION=${PUBLISH_VERSION}" >> $GITHUB_ENV
+          fi
+          echo "[INFO] Will publish version: ${PUBLISH_VERSION} with tag: ${NPM_DIST_TAG}"
 
-      - name: Build and publish next version
-        if: github.event_name == 'push'
+      - name: Build and publish npmjs
         run: |
           npm ci
           npm run lint
           npm run test:unit
-          npm run build  
-      
-          if npm view "@eclipse-che/license-tool@${NEXT_VERSION}" version 2>/dev/null | grep -q "${NEXT_VERSION}"; then
-            echo "[INFO] Version ${NEXT_VERSION} already published on npm, skipping."
-          else
-            npm publish --tag next --access public --provenance
-          fi
+          npm run build
 
-      - name: Build and publish release version
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GITHUB_TOKEN: ${{ secrets.LICENSE_TOOL_RELEASE_GITHUB_TOKEN }}
-          RELEASE_VERSION: ${{ github.event.inputs.release-version }}
-        run: |
-          ./make-release.sh --version "${RELEASE_VERSION}"
+          if npm view "@eclipse-che/license-tool@${PUBLISH_VERSION}" version 2>/dev/null | grep -q "${PUBLISH_VERSION}"; then
+            echo "[INFO] Version ${PUBLISH_VERSION} already published on npm, skipping."
+          else
+            npm publish --tag "${NPM_DIST_TAG}" --access public --provenance
+          fi
