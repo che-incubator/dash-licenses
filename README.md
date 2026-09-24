@@ -325,8 +325,10 @@ license-tool --help
 Version specified in package.json in main branch indicates the currently development version
 
 `typescript-publish.yml` workflow is responsible for building and publishing the artifact to npmjs.
-Pushes to main branch will trigger a publication of development build with the -next.SHA suffix version and "next" dist tag
-Pushes of tags, or running the pipeline manually with release mode will push a latest. The version provided in parameter must match the version provided in package.json.
+Pushes to main branch will trigger a publication of development build with the -next.SHA suffix version and "next" dist tag.
+Pushing release tags (e.g "2.0.1"), or running the job with release flag provided, will publish the release under latest tag.
+
+`release.yml` workflow can be used to set new version in package.json and create a new tag, when it is time to create a new release.
 
 ## Risks and Limitations
 
