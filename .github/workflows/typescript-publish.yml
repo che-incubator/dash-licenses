@@ -44,7 +44,7 @@ jobs:
         run: |
           echo "=== Workflow Parameters ==="
           echo "Event name: ${{ github.event_name }}"
-          echo "Ref: ${{ github.ref }}"
+          echo "Ref: $GITHUB_REF"
           echo "Branch: ${GITHUB_REF##*/}"
           echo "Release: ${RELEASE}"
           echo "Release version: ${RELEASE_VERSION}"
@@ -89,23 +89,28 @@ jobs:
           key: npm-${{ hashFiles('package-lock.json') }}
           restore-keys: npm-
 
-      - name: Set version suffix (next)
-        if: env.NPM_DIST_TAG == 'next'
+      - name: Set publish version
         run: |
-          BASE_VERSION=$(node -p "require('./package.json').version" | sed 's/-.*//')
-          NEXT_VERSION="${BASE_VERSION}-next.${GITHUB_SHA:0:7}"
-          echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
-          npm version "${NEXT_VERSION}" --no-git-tag-version
+          if [[ "${NPM_DIST_TAG}" == "next" ]]; then
+            BASE_VERSION=$(node -p "require('./package.json').version" | sed 's/-.*//')
+            PUBLISH_VERSION="${BASE_VERSION}-next.${GITHUB_SHA:0:7}"
+            echo "PUBLISH_VERSION=${PUBLISH_VERSION}" >> $GITHUB_ENV
+            npm version "${PUBLISH_VERSION}" --no-git-tag-version
+          else
+            PUBLISH_VERSION=$(node -p "require('./package.json').version")
+            echo "PUBLISH_VERSION=${PUBLISH_VERSION}" >> $GITHUB_ENV
+          fi
+          echo "[INFO] Will publish version: ${PUBLISH_VERSION} with tag: ${NPM_DIST_TAG}"
 
       - name: Build and publish npmjs
         run: |
           npm ci
           npm run lint
           npm run test:unit
-          npm run build  
-      
-          if npm view "@eclipse-che/license-tool@${NEXT_VERSION}" version 2>/dev/null | grep -q "${NEXT_VERSION}"; then
-            echo "[INFO] Version ${NEXT_VERSION} already published on npm, skipping."
+          npm run build
+
+          if npm view "@eclipse-che/license-tool@${PUBLISH_VERSION}" version 2>/dev/null | grep -q "${PUBLISH_VERSION}"; then
+            echo "[INFO] Version ${PUBLISH_VERSION} already published on npm, skipping."
           else
-            npm publish --tag next --access public --provenance
+            npm publish --tag "${NPM_DIST_TAG}" --access public --provenance
           fi

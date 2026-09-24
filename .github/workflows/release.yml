@@ -24,6 +24,9 @@ on:
         default: false
         required: false
 
+permissions:
+  contents: write
+  
 jobs:
   build-publish:
     name: Publish @eclipse-che/license-tool
@@ -31,7 +34,7 @@ jobs:
     timeout-minutes: 20
     env:
       RELEASE_REMAKE: ${{ github.event.inputs.release-remake }}
-      RELEASE_VERSION: ${{ github.event.inputs.release-remake }}
+      RELEASE_VERSION: ${{ github.event.inputs.release-version }}
     steps:
       - name: Validate parameters and build type
         shell: bash
@@ -43,6 +46,10 @@ jobs:
             exit 1
           fi
 
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Check existing tags
         run: |
