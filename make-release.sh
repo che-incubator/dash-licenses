@@ -18,8 +18,6 @@ usage() {
     echo "Usage: ./make-release.sh -v <version>"
     echo "optional parameters:"
     echo "--no-push - no pushes to remote repository"
-    echo "--skip-publish - no publishing to npmjs repository"
-    echo "--skip-bump-version - no updating of the next version after release"
     exit "${exit_code}"
 }
 
@@ -34,8 +32,6 @@ init() {
     case $1 in
       '-v'|'--version') VERSION="$2"; shift 1;;
       '--no-push') NO_PUSH=1;;
-      '--skip-publish') SKIP_PUBLISH=1;;
-      '--skip-bump-version') SKIP_NEXT_VERSION_BUMP=1;;
       '--help'|'-h') usage 0;;
       *) echo "[ERROR] Unknown argument: $1"; usage 1;;
     esac
@@ -65,19 +61,6 @@ checkoutToMain() {
   git checkout main
   git fetch origin --prune
   git pull origin main
-}
-
-publishArtifacts() {
-  echo "[INFO] Publishing @eclipse-che/license-tool ${VERSION} artifacts"
-
-  npm ci
-  npm run build
-
-  if [[ ${SKIP_PUBLISH} -eq 0 ]]; then
-    npm publish --tag latest --access public --provenance
-  else
-    echo "[INFO] Skipping publishing step"
-  fi
 }
 
 tagRelease() {
@@ -125,25 +108,5 @@ releaseVersion() {
   publishArtifacts
 }
 
-bumpNextVersion() {
-  checkoutToMain
-
-  COMMIT_MSG="ci: bump to ${NEXT_VERSION} [skip ci]"
-
-  updatePackageVersionAndCommitChanges \
-    "${NEXT_VERSION}" \
-    "${COMMIT_MSG}"
-
-}
-
-run() {
-  releaseVersion
-  if [[ ${SKIP_NEXT_VERSION_BUMP} -eq 0 ]]; then
-    bumpNextVersion
-  else
-    echo "[INFO] Skipping next version bumping step"
-  fi
-}
-
 init "$@"
-run
+releaseVersion

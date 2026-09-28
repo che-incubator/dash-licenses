@@ -1,0 +1,78 @@
+#
+# Copyright (c) 2024-2026 Red Hat, Inc.
+# This program and the accompanying materials are made
+# available under the terms of the Eclipse Public License 2.0
+# which is available at https://www.eclipse.org/legal/epl-2.0/
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+
+name: Set release version and create tags
+
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-version:
+        description: 'Specify version to be set in package.json'
+        type: string
+        default: false
+        required: true
+      release-remake:
+        description: 'If true, buld and release version that is specified in package.json. This value must match the one in package.json, otherwise the release will fail'
+        type: boolean
+        default: false
+        required: false
+
+permissions:
+  contents: write
+  
+jobs:
+  build-publish:
+    name: Publish @eclipse-che/license-tool
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      RELEASE_REMAKE: ${{ github.event.inputs.release-remake }}
+      RELEASE_VERSION: ${{ github.event.inputs.release-version }}
+    steps:
+      - name: Validate parameters and build type
+        shell: bash
+        run: |
+          if [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "[INFO] preparing to create new version and tag: ${RELEASE_VERSION}"
+          else
+            echo "[ERROR] incorrect version '${RELEASE_VERSION}'. Must be following format <number>.<number>.<number>, e.g. 2.1.0"
+            exit 1
+          fi
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check existing tags
+        run: |
+          set -e
+          TAG_RC=0
+          git ls-remote --exit-code origin "refs/tags/${VERSION}" >/dev/null 2>&1 || TAG_RC=$?
+          if [[ ${TAG_RC} -eq 0 ]]; then
+            if [[ "${RELEASE_REMAKE}" == "true" ]]; then
+              echo "[INFO] Removing tag for ${VERSION} version. New tag will be recreated during release."
+              git tag -d "${VERSION}" 2>/dev/null || true
+              git push origin :"${VERSION}"
+            else
+              echo "[ERROR] Cannot proceed with release - tag ${VERSION} already exists."
+              exit 1
+            fi
+          elif [[ ${TAG_RC} -eq 2 ]]; then
+            echo "[INFO] No existing tags detected for ${VERSION}"
+          else
+            echo "[ERROR] Failed to verify remote tags for ${VERSION} (exit code: ${TAG_RC})"
+            exit 1
+          fi
+
+      - name: Set new version and update tag
+        shell: bash
+        run: |
+          ./make-release.sh -v ${RELEASE_VERSION}
